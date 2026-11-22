@@ -1,0 +1,10 @@
+<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap-env:Header/>
+  <soap-env:Body>
+    <soap-env:Fault>
+      <faultcode>soap-env:Server</faultcode>
+      <faultstring xml:lang="en">Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118152056; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)</faultstring>
+      <detail/>
+    </soap-env:Fault>
+  </soap-env:Body>
+</soap-env:Envelope>

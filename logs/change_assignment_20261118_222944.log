@@ -1,0 +1,40 @@
+2026-11-18 22:29:44 INFO    Start change_assignment.py | host=http://rarqasapp.telkom.co.id:8001 sap-client=100 company=1000 | dry_run=False limit=1 wait=30
+2026-11-18 22:29:44 INFO    SAP user: 790126 (password not logged)
+2026-11-18 22:29:44 INFO    2 lines in 1 documents (company 1000)
+2026-11-18 22:29:44 INFO    Lookup: ZFDR_ACDOCA_V2_CDS @ 10.60.177.131 | change: http://rarqasapp.telkom.co.id:8001
+2026-11-18 22:29:44 INFO    SOAP operation: JournalEntryBulkChangeRequest_In
+2026-11-18 22:29:44 INFO    Batch 1/1: 2 lines (docs: 100004137), request -> logs/request_20261118_222944_001.xml, XSD validation: VALID
+2026-11-18 22:29:44 INFO    Batch 1/1: sending with MessageId=3ECC30DF-B59C-4479-A8DE-1186EF4481B2
+2026-11-18 22:29:45 INFO    HTTP POST http://rarqasapp.telkom.co.id:8001/sap/bc/srt/xip/sap/journalentrybulkchangerequest_/100/journalentrybulkchangerequest/journalentrybulkchangerequest -> 500 Internal Server Error
+2026-11-18 22:29:45 ERROR   SOAP call failed for batch 1/1
+Traceback (most recent call last):
+  File "/Users/yudhi/Documents/SourceCode/aiabap/change_assignment.py", line 357, in main
+    service_with_message_id(client, msg_id)[op](**payload)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/proxy.py", line 46, in __call__
+    return self._proxy._binding.send(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._proxy._client,
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        kwargs,
+        ^^^^^^^
+    )
+    ^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 135, in send
+    return self.process_reply(client, operation_obj, response)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 229, in process_reply
+    return self.process_error(doc, operation)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 329, in process_error
+    raise Fault(
+    ...<4 lines>...
+    )
+zeep.exceptions.Fault:  RABAX occurred on server side 
+2026-11-18 22:29:45 INFO      sent envelope -> logs/sent_20261118_222944_001.xml
+2026-11-18 22:29:45 INFO      response envelope -> logs/response_20261118_222944_001.xml
+2026-11-18 22:29:45 INFO    LINE doc=0100004137 year=2019 item=001 BEBAN: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [SEND_ERROR]  RABAX occurred on server side 
+2026-11-18 22:29:45 INFO    LINE doc=0100004137 year=2019 item=002 VENDOR: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [SEND_ERROR]  RABAX occurred on server side 
+2026-11-18 22:29:45 INFO    Results -> assignment_change_results_20261118_222944.csv   {'SEND_ERROR': 2}
+2026-11-18 22:29:45 ERROR   Nothing was sent successfully; see log: logs/change_assignment_20261118_222944.log

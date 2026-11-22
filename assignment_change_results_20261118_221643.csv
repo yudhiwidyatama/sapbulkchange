@@ -1,0 +1,3 @@
+doc,year,item,source,old,target,status,message
+0100004137,2019,001,BEBAN,BPR NTB Sumbawa,P-1409SCC-TTES0601,SEND_ERROR,Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118151644; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)
+0100004137,2019,002,VENDOR,BPR NTB Sumbawa,P-1409SCC-TTES0601,SEND_ERROR,Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118151644; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)

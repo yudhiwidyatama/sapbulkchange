@@ -1,0 +1,39 @@
+2026-11-18 22:16:43 INFO    Start change_assignment.py | host=http://rarqasapp.telkom.co.id:8001 sap-client=100 company=1000 | dry_run=False limit=1 wait=30
+2026-11-18 22:16:43 INFO    SAP user: 790126 (password not logged)
+2026-11-18 22:16:43 INFO    2 lines in 1 documents (company 1000)
+2026-11-18 22:16:43 INFO    Lookup: ZFDR_ACDOCA_V2_CDS @ 10.60.177.131 | change: http://rarqasapp.telkom.co.id:8001
+2026-11-18 22:16:43 INFO    SOAP operation: JournalEntryBulkChangeRequest_In
+2026-11-18 22:16:43 INFO    Batch 1/1: 2 lines (docs: 100004137), request -> logs/request_20261118_221643_001.xml, XSD validation: VALID
+2026-11-18 22:16:44 INFO    HTTP POST http://rarqasapp.telkom.co.id:8001/sap/bc/srt/xip/sap/journalentrybulkchangerequest_/100/journalentrybulkchangerequest/journalentrybulkchangerequest -> 500 Internal Server Error
+2026-11-18 22:16:44 ERROR   SOAP call failed for batch 1/1
+Traceback (most recent call last):
+  File "/Users/yudhi/Documents/SourceCode/aiabap/change_assignment.py", line 344, in main
+    client.service[op](**payload)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/proxy.py", line 46, in __call__
+    return self._proxy._binding.send(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._proxy._client,
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        kwargs,
+        ^^^^^^^
+    )
+    ^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 135, in send
+    return self.process_reply(client, operation_obj, response)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 229, in process_reply
+    return self.process_error(doc, operation)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/yudhi/Documents/SourceCode/browser-use-test/cdspy/venv/lib/python3.14/site-packages/zeep/wsdl/bindings/soap.py", line 329, in process_error
+    raise Fault(
+    ...<4 lines>...
+    )
+zeep.exceptions.Fault: Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118151644; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)
+2026-11-18 22:16:44 INFO      sent envelope -> logs/sent_20261118_221643_001.xml
+2026-11-18 22:16:44 INFO      response envelope -> logs/response_20261118_221643_001.xml
+2026-11-18 22:16:44 INFO    LINE doc=0100004137 year=2019 item=001 BEBAN: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [SEND_ERROR] Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118151644; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)
+2026-11-18 22:16:44 INFO    LINE doc=0100004137 year=2019 item=002 VENDOR: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [SEND_ERROR] Web service processing error; more details in the web service error log on provider side (UTC timestamp 20261118151644; Transaction ID D9233E8D272B01A0E006AF43A089BF3D)
+2026-11-18 22:16:44 INFO    Results -> assignment_change_results_20261118_221643.csv   {'SEND_ERROR': 2}
+2026-11-18 22:16:44 ERROR   Nothing was sent successfully; see log: logs/change_assignment_20261118_221643.log

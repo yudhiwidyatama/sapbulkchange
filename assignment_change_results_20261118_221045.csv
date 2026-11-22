@@ -1,0 +1,3 @@
+doc,year,item,source,old,target,status,message
+0100004137,2019,001,BEBAN,BPR NTB Sumbawa,P-1409SCC-TTES0601,SEND_ERROR,Unknown fault occured
+0100004137,2019,002,VENDOR,BPR NTB Sumbawa,P-1409SCC-TTES0601,SEND_ERROR,Unknown fault occured

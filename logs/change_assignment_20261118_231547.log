@@ -1,0 +1,15 @@
+2026-11-18 23:15:47 INFO    Start change_assignment.py | host=http://rarqasapp.telkom.co.id:8001 sap-client=100 company=1000 | dry_run=False limit=1 wait=30
+2026-11-18 23:15:47 INFO    SAP user: 790126 (password not logged)
+2026-11-18 23:15:47 INFO    2 lines in 1 documents (company 1000)
+2026-11-18 23:15:47 INFO    Lookup: ZFDR_ACDOCA_V2_CDS @ 10.60.177.131 | change: http://rarqasapp.telkom.co.id:8001
+2026-11-18 23:15:48 INFO    SOAP operation: JournalEntryBulkChangeRequest_In
+2026-11-18 23:15:48 INFO    Batch 1/1: 2 lines (docs: 100004137), request -> logs/request_20261118_231547_001.xml, XSD validation: VALID
+2026-11-18 23:15:48 INFO    Batch 1/1: sending with MessageId=C2C3B63B-1F5C-441D-9C73-34922F140FD5
+2026-11-18 23:15:48 INFO    HTTP POST http://rarqasapp.telkom.co.id:8001/sap/bc/srt/xip/sap/journalentrybulkchangerequest_/100/journalentrybulkchangerequest/journalentrybulkchangerequest -> 202 Accepted
+2026-11-18 23:15:48 INFO    Batch 1/1 sent. Check /AIF/ERR (namespace /FINAC, interface JECHANGEIN) for processing errors.
+2026-11-18 23:15:48 INFO      sent envelope -> logs/sent_20261118_231547_001.xml
+2026-11-18 23:15:48 INFO    Waiting 30s, then re-reading documents ...
+2026-11-18 23:16:18 INFO    LINE doc=0100004137 year=2019 item=001 BEBAN: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [NOT_CHANGED] current value 'BPR NTB Sumbawa'; check /AIF/ERR (e.g. FINS_ACDOC_POST089) or wait longer
+2026-11-18 23:16:18 INFO    LINE doc=0100004137 year=2019 item=002 VENDOR: 'BPR NTB Sumbawa' -> 'P-1409SCC-TTES0601' [NOT_CHANGED] current value 'BPR NTB Sumbawa'; check /AIF/ERR (e.g. FINS_ACDOC_POST089) or wait longer
+2026-11-18 23:16:18 INFO    Results -> assignment_change_results_20261118_231547.csv   {'NOT_CHANGED': 2}
+2026-11-18 23:16:18 INFO    Finished. Log: logs/change_assignment_20261118_231547.log
