@@ -1,0 +1,40 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SapBulkChange.ViewModels"
+        x:Class="SapBulkChange.Views.ConfirmExecuteDialog"
+        x:DataType="vm:ConfirmExecuteViewModel"
+        Title="Confirm SAP Execution"
+        Width="480"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="20" Spacing="14">
+    <TextBlock Text="Confirm Bulk Assignment Change"
+               FontSize="16"
+               FontWeight="SemiBold" />
+
+    <Border Background="#F3F4F6" CornerRadius="6" Padding="12">
+      <TextBlock Text="{Binding SummaryText}"
+                 TextWrapping="Wrap"
+                 FontFamily="Consolas,Menlo,monospace"
+                 FontSize="12" />
+    </Border>
+
+    <CheckBox IsVisible="{Binding Request.IsProduction}"
+              IsChecked="{Binding IsProductionConfirmed}"
+              Content="I confirm this will modify Production FI documents"
+              FontWeight="SemiBold"
+              Foreground="#991B1B" />
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+      <Button Content="Cancel"
+              Command="{Binding CancelCommand}"
+              MinWidth="90" />
+      <Button Content="Confirm &amp; Send to SAP"
+              Command="{Binding ConfirmCommand}"
+              IsEnabled="{Binding CanConfirm}"
+              Classes="accent"
+              MinWidth="160" />
+    </StackPanel>
+  </StackPanel>
+</Window>

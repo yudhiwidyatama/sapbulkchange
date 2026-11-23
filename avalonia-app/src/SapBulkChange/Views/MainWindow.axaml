@@ -1,0 +1,221 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SapBulkChange.ViewModels"
+        xmlns:models="using:SapBulkChange.Models"
+        xmlns:views="using:SapBulkChange.Views"
+        x:Class="SapBulkChange.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="SAP FI Bulk Assignment Change (ZUONR)"
+        Width="1120"
+        Height="780"
+        MinWidth="900"
+        MinHeight="620"
+        DragDrop.AllowDrop="True">
+
+  <Window.Resources>
+    <views:StatusColorConverter x:Key="StatusColorConverter" />
+    <views:EnvBannerBrushConverter x:Key="EnvBannerBrushConverter" />
+    <views:EnvTextBrushConverter x:Key="EnvTextBrushConverter" />
+  </Window.Resources>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" Margin="14">
+
+    <!-- 1. Connection & Credentials -->
+    <Border Grid.Row="0" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10">
+      <StackPanel Spacing="8">
+        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="Env:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold" />
+          <ComboBox ItemsSource="{Binding Profiles}"
+                    SelectedItem="{Binding SelectedProfile}"
+                    IsEnabled="{Binding IsNotBusy}"
+                    MinWidth="110"
+                    Margin="0,0,14,0" />
+
+          <TextBlock Text="Company:" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Text="{Binding CompanyCode}" IsEnabled="{Binding IsNotBusy}" Width="75" Margin="0,0,14,0" />
+
+          <TextBlock Text="Dates:" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Text="{Binding StartDate}" IsEnabled="{Binding IsNotBusy}" Width="90" Watermark="YYYYMMDD" />
+          <TextBlock Text="-" VerticalAlignment="Center" Margin="4,0" />
+          <TextBox Text="{Binding EndDate}" IsEnabled="{Binding IsNotBusy}" Width="90" Watermark="YYYYMMDD" Margin="0,0,14,0" />
+
+          <ToggleButton IsChecked="{Binding IsAdvancedExpanded}" Content="Connection / Adv" />
+        </WrapPanel>
+
+        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock Text="SAP User:" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Text="{Binding SapUser}" IsEnabled="{Binding IsNotBusy}" Width="160" Margin="0,0,14,0" />
+
+          <TextBlock Text="Password:" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <TextBox Text="{Binding SapPassword}" IsEnabled="{Binding IsNotBusy}" PasswordChar="*" Width="170" Margin="0,0,14,0" />
+
+          <Button Content="Test Connection"
+                  Command="{Binding TestConnectionCommand}"
+                  IsEnabled="{Binding IsNotBusy}" />
+        </WrapPanel>
+
+        <!-- Collapsible Advanced Panel -->
+        <Grid IsVisible="{Binding IsAdvancedExpanded}"
+              ColumnDefinitions="Auto,*,Auto,120"
+              RowDefinitions="Auto,Auto,Auto"
+              Margin="0,4,0,0">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="OData URL:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ODataBaseUrl}" IsEnabled="{Binding IsNotBusy}" Margin="0,0,0,6" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="SOAP URL:" VerticalAlignment="Center" Margin="0,0,10,6" />
+          <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding SoapEndpointUrl}" IsEnabled="{Binding IsNotBusy}" Margin="0,0,0,6" />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="SAP Client:" VerticalAlignment="Center" Margin="0,0,10,0" />
+          <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="14">
+            <TextBox Text="{Binding SapClient}" IsEnabled="{Binding IsNotBusy}" Width="70" />
+            <TextBlock Text="Batch Docs:" VerticalAlignment="Center" />
+            <NumericUpDown Value="{Binding BatchDocs}" Minimum="1" Maximum="500" Increment="10" IsEnabled="{Binding IsNotBusy}" Width="110" />
+            <CheckBox IsChecked="{Binding AllowInsecureTls}" Content="Allow Insecure TLS (Self-signed QAS cert)" IsEnabled="{Binding IsNotBusy}" />
+          </StackPanel>
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- 2. Environment Banner -->
+    <Border Grid.Row="1"
+            Background="{Binding IsProductionEnvironment, Converter={StaticResource EnvBannerBrushConverter}}"
+            CornerRadius="6"
+            Padding="10,6"
+            Margin="0,0,0,10">
+      <TextBlock Text="{Binding EnvironmentBannerText}"
+                 Foreground="{Binding IsProductionEnvironment, Converter={StaticResource EnvTextBrushConverter}}"
+                 FontWeight="SemiBold" />
+    </Border>
+
+    <!-- 3. Excel Picker -->
+    <Border Grid.Row="2" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <TextBlock Grid.Column="0" Text="Excel File:" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,8,0" />
+          <TextBox Grid.Column="1" Text="{Binding ExcelFilePath}" IsReadOnly="True" Watermark="Drop .xlsx file here or click Browse..." Margin="0,0,8,0" />
+          <Button Grid.Column="2" Content="Browse..." Command="{Binding BrowseExcelCommand}" IsEnabled="{Binding IsNotBusy}" />
+        </Grid>
+        <TextBlock Text="{Binding ExcelSummaryText}" Foreground="#4B5563" FontSize="12" />
+      </StackPanel>
+    </Border>
+
+    <!-- 4. Action Bar -->
+    <WrapPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+      <Button Content="1. Preview Plan (Dry Run)"
+              Command="{Binding PreviewPlanCommand}"
+              IsEnabled="{Binding IsNotBusy}"
+              Classes="accent"
+              Margin="0,0,8,4" />
+      <Button Content="2. Execute Changes"
+              Command="{Binding ExecuteChangesCommand}"
+              IsEnabled="{Binding CanExecute}"
+              Margin="0,0,8,4" />
+      <Button Content="3. Re-Verify"
+              Command="{Binding ReVerifyCommand}"
+              IsEnabled="{Binding CanReVerify}"
+              Margin="0,0,16,4" />
+
+      <CheckBox IsChecked="{Binding UseLimitDocs}" Content="Limit docs:" IsEnabled="{Binding IsNotBusy}" VerticalAlignment="Center" Margin="0,0,4,4" />
+      <NumericUpDown Value="{Binding LimitDocs}" Minimum="1" Maximum="1000" IsEnabled="{Binding UseLimitDocs}" Width="95" Margin="0,0,12,4" />
+
+      <TextBlock Text="Wait(s):" VerticalAlignment="Center" Margin="0,0,4,4" />
+      <NumericUpDown Value="{Binding VerifyWaitSeconds}" Minimum="0" Maximum="600" IsEnabled="{Binding IsNotBusy}" Width="95" Margin="0,0,16,4" />
+
+      <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" IsEnabled="{Binding CanExport}" Margin="0,0,8,4" />
+      <Button Content="Open Logs" Command="{Binding OpenLogsCommand}" Margin="0,0,0,4" />
+    </WrapPanel>
+
+    <!-- 5. Filter Pills & Search -->
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+      <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+        <Button Command="{Binding SetFilterCommand}" CommandParameter="All" Margin="0,0,6,0">
+          <TextBlock Text="{Binding TotalCount, StringFormat='All: {0}'}" />
+        </Button>
+        <Button Command="{Binding SetFilterCommand}" CommandParameter="Planned" Margin="0,0,6,0">
+          <TextBlock Text="{Binding PlannedCount, StringFormat='Planned: {0}'}" Foreground="#1D4ED8" />
+        </Button>
+        <Button Command="{Binding SetFilterCommand}" CommandParameter="Changed" Margin="0,0,6,0">
+          <TextBlock Text="{Binding ChangedCount, StringFormat='Changed: {0}'}" Foreground="#15803D" />
+        </Button>
+        <Button Command="{Binding SetFilterCommand}" CommandParameter="Skipped" Margin="0,0,6,0">
+          <TextBlock Text="{Binding SkippedCount, StringFormat='Skipped: {0}'}" Foreground="#6B7280" />
+        </Button>
+        <Button Command="{Binding SetFilterCommand}" CommandParameter="Errors">
+          <TextBlock Text="{Binding ErrorCount, StringFormat='Errors: {0}'}" Foreground="#DC2626" />
+        </Button>
+      </WrapPanel>
+
+      <TextBox Grid.Column="1" Text="{Binding SearchText}" Width="240" Watermark="Search doc, ZUONR, status..." />
+    </Grid>
+
+    <!-- 6. Plan & Results DataGrid -->
+    <DataGrid Grid.Row="5"
+              ItemsSource="{Binding FilteredRows}"
+              AutoGenerateColumns="False"
+              IsReadOnly="True"
+              GridLinesVisibility="Horizontal"
+              BorderBrush="#E5E7EB"
+              BorderThickness="1"
+              CanUserReorderColumns="True"
+              CanUserResizeColumns="True"
+              Margin="0,0,0,10">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Doc" Binding="{Binding Doc}" Width="115" />
+        <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="65" />
+        <DataGridTextColumn Header="Item" Binding="{Binding Item}" Width="65" />
+        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="85" />
+        <DataGridTextColumn Header="Old ZUONR" Binding="{Binding OldAssignment}" Width="160" />
+        <DataGridTextColumn Header="New ZUONR" Binding="{Binding TargetAssignment}" Width="160" />
+        <DataGridTemplateColumn Header="Status" Width="165">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate x:DataType="models:ChangePlanRow">
+              <Border Background="{Binding Status, Converter={StaticResource StatusColorConverter}}"
+                      CornerRadius="4"
+                      Padding="6,2"
+                      Margin="4,2"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center">
+                <TextBlock Text="{Binding StatusText}"
+                           Foreground="White"
+                           FontSize="11"
+                           FontWeight="SemiBold" />
+              </Border>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+      </DataGrid.Columns>
+    </DataGrid>
+
+    <!-- 7. Execution Log & Progress -->
+    <Border Grid.Row="6" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="8">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+          <ToggleButton Grid.Column="0" IsChecked="{Binding IsLogExpanded}" Content="Execution Log" Margin="0,0,10,0" />
+          <ProgressBar Grid.Column="1"
+                       Minimum="0"
+                       Maximum="100"
+                       Value="{Binding ProgressValue}"
+                       Height="14"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0" />
+          <TextBlock Grid.Column="2"
+                     Text="{Binding ProgressValue, StringFormat='{}{0:0}%'}"
+                     VerticalAlignment="Center"
+                     Width="40"
+                     Margin="0,0,10,0" />
+          <Button Grid.Column="3"
+                  Content="Cancel"
+                  Command="{Binding CancelCommand}"
+                  IsEnabled="{Binding IsBusy}" />
+        </Grid>
+
+        <ListBox IsVisible="{Binding IsLogExpanded}"
+                 ItemsSource="{Binding LogLines}"
+                 Height="120"
+                 FontFamily="Consolas,Menlo,monospace"
+                 FontSize="11" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

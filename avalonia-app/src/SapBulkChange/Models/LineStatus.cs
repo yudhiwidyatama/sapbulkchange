@@ -1,0 +1,16 @@
+namespace SapBulkChange.Models;
+
+public enum LineStatus
+{
+    PLANNED,
+    SKIPPED_ALREADY_SET,
+    DOC_NOT_FOUND,
+    NO_MATCH,
+    AMBIGUOUS,
+    XSD_INVALID,
+    SENT,
+    SEND_ERROR,
+    CHANGED,
+    NOT_CHANGED,
+    VERIFY_ERROR
+}

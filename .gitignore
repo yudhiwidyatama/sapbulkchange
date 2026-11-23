@@ -1,0 +1,19 @@
+# .NET build artifacts
+[Bb]in/
+[Oo]bj/
+.avalonia-build-tasks/
+*.user
+*.suo
+.vs/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env/
+
+# macOS / OS artifacts
+.DS_Store
+Thumbs.db

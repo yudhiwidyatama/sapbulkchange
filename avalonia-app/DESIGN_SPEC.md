@@ -2,7 +2,7 @@
 
 ## 1. Purpose & Scope
 
-Desktop application (.NET 8 + Avalonia UI) replacing the CLI scripts [`change_assignment.py`](../change_assignment.py) and [`fetch_acdoca_docs.py`](../fetch_acdoca_docs.py) for end users who need to bulk-update the **Assignment (`ZUONR`)** field on posted SAP S/4HANA FI documents from an Excel file.
+Desktop application (.NET 9 + Avalonia UI) replacing the CLI scripts [`change_assignment.py`](../change_assignment.py) and [`fetch_acdoca_docs.py`](../fetch_acdoca_docs.py) for end users who need to bulk-update the **Assignment (`ZUONR`)** field on posted SAP S/4HANA FI documents from an Excel file.
 
 ### MVP Goals
 - **Zero-CLI experience** for Finance end users: pick Excel → enter SAP credentials → preview changes (Dry Run) → execute → verify → export CSV report.
@@ -24,7 +24,7 @@ Keep dependencies minimal and MIT/Apache-licensed:
 
 | Concern | Package / Technology | Rationale |
 |---|---|---|
-| Runtime & UI | `.NET 8` (LTS) + `Avalonia` 11 (`Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Controls.DataGrid`) | Cross-platform native desktop, single-file publishable. |
+| Runtime & UI | `.NET 9` + `Avalonia` 11 (`Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Controls.DataGrid`) | Cross-platform native desktop, single-file publishable. |
 | MVVM | `CommunityToolkit.Mvvm` | Source-generated `[ObservableProperty]` and `[RelayCommand]`; minimal boilerplate. |
 | Excel Reading | `ClosedXML` | Pure .NET `.xlsx` parser, no Microsoft Excel installation needed. |
 | HTTP / OData | Built-in `HttpClient` + `System.Xml.Linq` (`XDocument`) | Zero external dependencies for Atom XML parsing. |
