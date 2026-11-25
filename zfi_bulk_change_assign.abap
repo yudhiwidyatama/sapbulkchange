@@ -293,7 +293,7 @@ CLASS lcl_xlsx_reader IMPLEMENTATION.
   METHOD resolve_first_sheet_path.
     rv_path = 'xl/worksheets/sheet1.xml'.
 
-    lo_zip->get(
+    io_zip->get(
       EXPORTING name    = 'xl/workbook.xml'
       IMPORTING content = DATA(lv_wb_xml)
       EXCEPTIONS OTHERS = 1 ).
@@ -333,7 +333,7 @@ CLASS lcl_xlsx_reader IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    lo_zip->get(
+    io_zip->get(
       EXPORTING name    = 'xl/_rels/workbook.xml.rels'
       IMPORTING content = DATA(lv_rels_xml)
       EXCEPTIONS OTHERS = 1 ).
@@ -1232,7 +1232,7 @@ CLASS lcl_orchestrator IMPLEMENTATION.
           <fs_prow>-status  = CONV char24( lcl_types=>c_status-not_changed ).
           <fs_prow>-icon    = status_to_icon( lcl_types=>c_status-not_changed ).
           <fs_prow>-message = CONV char255(
-            |{ <fs_prow>-message } | current value '{ lv_cur_val }' differs from '{ <fs_prow>-target }'| ).
+            |{ <fs_prow>-message }; current value '{ lv_cur_val }' differs from '{ <fs_prow>-target }'| ).
         ENDIF.
       ENDLOOP.
     ENDIF.
@@ -1357,8 +1357,9 @@ CLASS lcl_file_io IMPLEMENTATION.
         EXPORTING iv_msg = 'Excel file path is empty'.
     ENDIF.
 
+    DATA lv_os_msg TYPE string.
     IF iv_app_server = abap_true.
-      OPEN DATASET iv_path FOR INPUT IN BINARY MODE MESSAGE DATA(lv_os_msg).
+      OPEN DATASET iv_path FOR INPUT IN BINARY MODE MESSAGE lv_os_msg.
       IF sy-subrc <> 0.
         RAISE EXCEPTION TYPE lcx_bulk_error
           EXPORTING iv_msg = |Cannot open application server file '{ iv_path }': { lv_os_msg }|.
@@ -1416,8 +1417,9 @@ CLASS lcl_file_io IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    DATA lv_os_msg TYPE string.
     IF iv_app_server = abap_true.
-      OPEN DATASET iv_path FOR OUTPUT IN TEXT MODE ENCODING UTF-8 MESSAGE DATA(lv_os_msg).
+      OPEN DATASET iv_path FOR OUTPUT IN TEXT MODE ENCODING UTF-8 MESSAGE lv_os_msg.
       IF sy-subrc <> 0.
         RAISE EXCEPTION TYPE lcx_bulk_error
           EXPORTING iv_msg = |Cannot write application server CSV '{ iv_path }': { lv_os_msg }|.
@@ -1536,8 +1538,8 @@ CLASS lcl_alv_presenter IMPLEMENTATION.
         lo_alv->get_display_settings( )->set_striped_pattern( abap_true ).
         lo_alv->get_display_settings( )->set_list_header(
           |FI Bulk Assignment Change (BUKRS { iv_bukrs }) - Total: { lines( lt_display ) } | &&
-          |Planned: { lv_cnt_planned } | Changed: { lv_cnt_changed } | &&
-          |Skipped: { lv_cnt_skipped } | Errors: { lv_cnt_errors }| ).
+          |Planned: { lv_cnt_planned } Changed: { lv_cnt_changed } | &&
+          |Skipped: { lv_cnt_skipped } Errors: { lv_cnt_errors }| ).
 
         DATA(lo_cols) = lo_alv->get_columns( ).
         lo_cols->set_optimize( abap_true ).
@@ -1574,37 +1576,37 @@ ENDCLASS.
 *======================================================================*
 * Selection Screen Definition
 *======================================================================*
-SELECTION-SCREEN BEGIN OF BLOCK b_file WITH FRAME TITLE TEXT-b01.
+SELECTION-SCREEN BEGIN OF BLOCK b_file WITH FRAME TITLE t_b01.
   PARAMETERS:
     p_file   TYPE string LOWER CASE OBLIGATORY,
     p_appsrv AS CHECKBOX DEFAULT ' '.
 SELECTION-SCREEN END OF BLOCK b_file.
 
-SELECTION-SCREEN BEGIN OF BLOCK b_sap WITH FRAME TITLE TEXT-b02.
+SELECTION-SCREEN BEGIN OF BLOCK b_sap WITH FRAME TITLE t_b02.
   PARAMETERS:
     p_bukrs TYPE bukrs OBLIGATORY DEFAULT '1000',
     p_rldnr TYPE fins_ledger OBLIGATORY DEFAULT '0L',
     p_limit TYPE i DEFAULT 0.
 SELECTION-SCREEN END OF BLOCK b_sap.
 
-SELECTION-SCREEN BEGIN OF BLOCK b_mode WITH FRAME TITLE TEXT-b03.
+SELECTION-SCREEN BEGIN OF BLOCK b_mode WITH FRAME TITLE t_b03.
   PARAMETERS:
     p_dryrun RADIOBUTTON GROUP grp1 DEFAULT 'X',
     p_testrn RADIOBUTTON GROUP grp1,
     p_exec   RADIOBUTTON GROUP grp1.
 SELECTION-SCREEN END OF BLOCK b_mode.
 
-SELECTION-SCREEN BEGIN OF BLOCK b_out WITH FRAME TITLE TEXT-b04.
+SELECTION-SCREEN BEGIN OF BLOCK b_out WITH FRAME TITLE t_b04.
   PARAMETERS:
     p_csv    AS CHECKBOX DEFAULT ' ',
     p_csvfil TYPE string LOWER CASE.
 SELECTION-SCREEN END OF BLOCK b_out.
 
 INITIALIZATION.
-  TEXT-b01 = '1. Excel (.xlsx) Input File (macOS & Windows)'.
-  TEXT-b02 = '2. SAP Document Selection Scope'.
-  TEXT-b03 = '3. Execution Mode'.
-  TEXT-b04 = '4. Optional Audit CSV Export'.
+  t_b01 = '1. Excel (.xlsx) Input File (macOS & Windows)'.
+  t_b02 = '2. SAP Document Selection Scope'.
+  t_b03 = '3. Execution Mode'.
+  t_b04 = '4. Optional Audit CSV Export'.
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
   lcl_file_io=>browse_local_xlsx( CHANGING cv_path = p_file ).
@@ -1633,18 +1635,70 @@ START-OF-SELECTION.
           et_errors     = DATA(lt_excel_errs)
           et_doc_keys   = DATA(lt_doc_keys) ).
 
-      DATA(lv_mode) = COND c(
+      DATA(lv_mode) = COND char1(
         WHEN p_dryrun = abap_true THEN lcl_types=>c_mode-dry_run
         WHEN p_testrn = abap_true THEN lcl_types=>c_mode-test_run
         ELSE lcl_types=>c_mode-execute ).
 
-      " 2. Safety confirmation popup before live database updates
+      " 2. Safety confirmation popup before live database updates.
+      "    A read-only dry-run pass resolves the real counts first.
       IF lv_mode = lcl_types=>c_mode-execute AND sy-batch = abap_false.
         DATA lv_answer TYPE c LENGTH 1.
+
+        DATA(lt_preview) = NEW lcl_orchestrator(
+          io_db      = NEW lcl_db_provider( )
+          io_changer = NEW lcl_fi_doc_changer( ) )->run(
+            iv_bukrs      = p_bukrs
+            iv_rldnr      = p_rldnr
+            iv_mode       = lcl_types=>c_mode-dry_run
+            it_excel_rows = lt_excel_rows
+            it_excel_errs = lt_excel_errs
+            it_doc_keys   = lt_doc_keys ).
+
+        DATA lt_planned_docs TYPE lcl_types=>tt_doc_keys.
+        DATA(lv_n_planned) = 0.
+        DATA(lv_n_skipped) = 0.
+        DATA(lv_n_excel)   = 0.
+        DATA(lv_n_unres)   = 0.
+        LOOP AT lt_preview INTO DATA(ls_prev).
+          CASE ls_prev-status.
+            WHEN lcl_types=>c_status-planned.
+              lv_n_planned = lv_n_planned + 1.
+              READ TABLE lt_planned_docs TRANSPORTING NO FIELDS
+                WITH KEY doc = ls_prev-doc year = ls_prev-year.
+              IF sy-subrc <> 0.
+                APPEND VALUE lcl_types=>ty_doc_key( doc = ls_prev-doc year = ls_prev-year )
+                  TO lt_planned_docs.
+              ENDIF.
+            WHEN lcl_types=>c_status-skipped_already_set.
+              lv_n_skipped = lv_n_skipped + 1.
+            WHEN lcl_types=>c_status-excel_error.
+              lv_n_excel = lv_n_excel + 1.
+            WHEN OTHERS.
+              lv_n_unres = lv_n_unres + 1.
+          ENDCASE.
+        ENDLOOP.
+
+        IF lv_n_planned = 0.
+          MESSAGE |Nothing to change: 0 planned lines ({ lv_n_skipped } already set, { lv_n_unres } unresolved, { lv_n_excel } Excel errors).| TYPE 'I'.
+          lcl_alv_presenter=>display(
+            iv_bukrs = p_bukrs
+            iv_mode  = lcl_types=>c_mode-dry_run
+            it_plan  = lt_preview ).
+          RETURN.
+        ENDIF.
+
+        DATA(lv_question) =
+          |Modify Assignment (ZUONR) in Company { p_bukrs }? | &&
+          |Planned: { lv_n_planned } line(s) on { lines( lt_planned_docs ) } document(s). | &&
+          |Skipped (already set): { lv_n_skipped }. | &&
+          |Unresolved (not found/no match/ambiguous): { lv_n_unres }. | &&
+          |Excel errors: { lv_n_excel }.|.
+
         CALL FUNCTION 'POPUP_TO_CONFIRM'
           EXPORTING
             titlebar              = 'Confirm Live FI Assignment Bulk Change'
-            text_question         = |Modify Assignment (ZUONR) on up to { lines( lt_doc_keys ) } documents ({ lines( lt_excel_rows ) } lines) in Company { p_bukrs }?|
+            text_question         = lv_question
             text_button_1         = 'Execute'
             text_button_2         = 'Cancel'
             default_button        = '2'
