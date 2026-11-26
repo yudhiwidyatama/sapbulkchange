@@ -8,12 +8,21 @@ Design and implement a standalone, production-grade ABAP executable report **`ZF
 1. **Cross-Platform Excel (`.xlsx`) Parsing (macOS & Windows)**:
    - **Zero OLE2 Automation**: Never call `ALSM_EXCEL_TO_INTERNAL_TABLE`, `TEXT_CONVERT_XLS_TO_SAP`, or `KCD_EXCEL_OLE_TO_INT_CONVERT` (which spawn `EXCEL.APPLICATION` via COM/OLE2 and **fail completely on macOS SAP GUI for Java** and WebGUI/Fiori).
    - **Binary Upload + Server-Side OpenXML Parsing**: Upload the `.xlsx` file as raw binary (`FILETYPE = 'BIN'`) via `CL_GUI_FRONTEND_SERVICES=>GUI_UPLOAD` into an `XSTRING`, or read from the Application Server (`OPEN DATASET ... FOR INPUT IN BINARY MODE`), and parse the OpenXML package in memory on the ABAP server using `CL_ABAP_ZIP` and `sXML` (`CL_SXML_STRING_READER`).
-2. **100% Business Logic Parity with the Python Scripts**:
-   - Parse the same 5 required Excel columns (`Doc Number + Year`, `Source Data`, `G/L Account`, `Account`, `KODE PROJECT`) by header name (case-insensitive, trimmed).
-   - Validate row rules (`Doc Number + Year` $\ge 5$ chars $\rightarrow$ 10-digit `BELNR` + 4-digit `GJAHR`; `Source Data` $\in \{\text{BEBAN}, \text{VENDOR}\}$; `KODE PROJECT` non-empty and $\le 18$ chars).
-   - Resolve line items against `ACDOCA` (filtered by `RBUKRS`, `RLDNR = '0L'`, and `(BELNR, GJAHR)` pairs) by matching alpha-stripped `RACCT` against the Excel `G/L Account`.
-   - Enforce the same status state machine: `PLANNED`, `SKIPPED_ALREADY_SET`, `DOC_NOT_FOUND`, `NO_MATCH`, `AMBIGUOUS`, `TESTRUN_OK`, `CHANGED`, `NOT_CHANGED`, `SEND_ERROR`, and `EXCEL_ERROR`.
-   - support `--limit N` (`P_LIMIT`), `--dry-run` (`P_DRYRUN`), and `--testrun` (`P_TESTRN`).
+2. **FBL3N Line-Item (`BUZEI`) Key Resolution & Field Validation**:
+   - **Upload Format with `Buzei` / `Line Item` (FBL3N Export)**:
+     - Accepts common FBL3N line item header aliases: `'Buzei'`, `'Line Item'`, `'Item'`, `'Itm'`, `'Line Item No'`, `'Doc. Item'`.
+     - Supports both combined `'Doc Number + Year'` **or** separate `'Document Number'` + `'Fiscal Year'`/`'Year'` (or year derived from `'Posting Date'`).
+     - Requires validation columns `'Document Type'` (`BLART`), `'Posting Date'` (`BUDAT`), `'G/L Account'` (`RACCT`/`HKONT`), and target assignment `'KODE PROJECT'` (`ZUONR`).
+   - **Target Row Determination**:
+     - The exact row to be updated is determined by **(Company Code `P_BUKRS`, Document Number `BELNR`, Fiscal Year `GJAHR`, and Line Item `BUZEI`)**.
+   - **Validation Fields (`Document Type`, `Posting Date`, `G/L Account`)**:
+     - Once the line item is located in `ACDOCA` by `(RBUKRS, BELNR, GJAHR, BUZEI)`, the program validates:
+       1. **Document Type (`BLART`)**: Excel `Document Type` vs `ACDOCA-BLART`.
+       2. **Posting Date (`BUDAT`)**: Excel `Posting Date` (supports Excel integer date serials like `43496`, `YYYYMMDD`, `YYYY-MM-DD`, `DD.MM.YYYY`, `DD/MM/YYYY`) vs `ACDOCA-BUDAT`.
+       3. **G/L Account (`RACCT`)**: Alpha-stripped Excel `G/L Account` vs alpha-stripped `ACDOCA-RACCT`.
+     - If **any** of the 3 validation fields mismatch, the row is skipped/failed with status `VALIDATION_FAILED` and a diagnostic message listing every mismatched field.
+   - Enforce the status state machine: `PLANNED`, `SKIPPED_ALREADY_SET`, `DOC_NOT_FOUND`, `ITEM_NOT_FOUND`, `VALIDATION_FAILED`, `TESTRUN_OK`, `CHANGED`, `NOT_CHANGED`, `SEND_ERROR`, and `EXCEL_ERROR`.
+   - Support `--limit N` (`P_LIMIT`), `--dry-run` (`P_DRYRUN`), and `--testrun` (`P_TESTRN`).
 3. **Clean Architecture & High Testability (ABAP Unit)**:
    - Decouple file I/O, OpenXML `.xlsx` parsing, database access (`lif_db_provider`), and document change execution (`lif_doc_changer`) via local interfaces so that every component is deterministic and covered by **ABAP Unit (`FOR TESTING DURATION SHORT RISK LEVEL HARMLESS`)** without modifying database tables or requiring a GUI connection.
 
@@ -26,11 +35,11 @@ flowchart TD
     UI["Selection Screen & SAP GUI / WebGUI\n(macOS SAP GUI for Java / Windows SAP GUI)"]
     UPLOAD["lcl_file_io\nFILE_OPEN_DIALOG + GUI_UPLOAD (BIN -> XSTRING)\nOS-agnostic path handling (/ vs \\)"]
     XLSX["lcl_xlsx_reader\nCL_ABAP_ZIP + CL_SXML_STRING_READER\nParses workbook.xml, sharedStrings.xml, sheet1.xml"]
-    VALID["lcl_excel_parser\nHeader mapping + row validation\n(BELNR 10-digit, GJAHR, BEBAN/VENDOR, ZUONR <= 18)"]
-    ORCH["lcl_orchestrator\nDry-Run / Test-Run / Live Execution & Verification"]
+    VALID["lcl_excel_parser\nHeader mapping + row validation\n(BELNR, GJAHR, BUZEI, BLART, BUDAT, RACCT, ZUONR <= 18)"]
+    ORCH["lcl_orchestrator\nKey lookup (BUKRS, BELNR, GJAHR, BUZEI)\n+ Field Validation (BLART, BUDAT, RACCT)\n+ Dry-Run / Test-Run / Live Execution & Verification"]
     DB["lif_db_provider -> lcl_db_provider\nBulk SELECT from ACDOCA, BKPF, BSEG"]
     CHG["lif_doc_changer -> lcl_fi_doc_changer\nENQUEUE_EFBKPF + FI_DOCUMENT_CHANGE\nBAPI_TRANSACTION_COMMIT / ROLLBACK"]
-    OUT["lcl_output_view\nCL_SALV_TABLE ALV Report + Optional CSV Export"]
+    OUT["lcl_alv_presenter\nCL_SALV_TABLE ALV Report + Optional CSV Export"]
 
     UI --> UPLOAD
     UPLOAD --> XLSX
@@ -70,46 +79,52 @@ Why custom `CL_ABAP_ZIP` + `sXML` instead of OLE2 or `CL_FDT_XL_SPREADSHEET`?
 - `P_BUKRS` (`BUKRS`, default `'1000'`, obligatory): Company Code.
 - `P_RLDNR` (`FINS_LEDGER`, default `'0L'`, obligatory): Ledger for `ACDOCA` lookup.
 - `P_LIMIT` (`I`, default `0`): Process only the first $N$ distinct documents (`0` = all documents).
-- `P_DRYRUN` (`ABAP_BOOL` radiobutton, default `'X'`): **Dry Run (Plan Only)** — resolves line items against `ACDOCA`, checks `BSEG` clearing status, makes no database changes.
-- `P_TESTRN` (`ABAP_BOOL` radiobutton): **Test Run (Validate Lock & Authority)** — performs all `BKPF`/`BSEG` checks and document locking without calling `FI_DOCUMENT_CHANGE`.
+- `P_DRYRUN` (`ABAP_BOOL` radiobutton, default `'X'`): **Dry Run (Plan Only)** — resolves line items against `ACDOCA`, validates `BLART`/`BUDAT`/`RACCT`, checks `BSEG` clearing status, makes no database changes.
+- `P_TESTRN` (`ABAP_BOOL` radiobutton): **Test Run (Validate Lock & Authority)** — performs all checks and document locking without calling `FI_DOCUMENT_CHANGE`.
 - `P_EXEC` (`ABAP_BOOL` radiobutton): **Live Execution** — updates `ZUONR` via `FI_DOCUMENT_CHANGE`, commits per document, and re-verifies in `ACDOCA`.
 - `P_CSV` (`ABAP_BOOL` checkbox) + `P_CSVFIL` (`STRING`): Optional local CSV result export path.
 
 ### 3.2 Excel Row Validation (`lcl_excel_parser`)
 1. **Header Row (Row 1)**:
    - Map column headers (trimmed, case-insensitive) to column indices:
-     - `Doc Number + Year`
-     - `Source Data`
-     - `G/L Account`
-     - `Account`
-     - `KODE PROJECT`
+     - **Document & Fiscal Year**: `'Doc Number + Year'` OR separate `'Document Number'` (`'Doc Number'`, `'Doc. No.'`, `'Document No'`, `'BELNR'`) + optional `'Fiscal Year'` (`'Year'`, `'GJAHR'`; falls back to year of `'Posting Date'` if omitted).
+     - **Buzei / Line Item (Required)**: `'Buzei'`, `'Line Item'`, `'Item'`, `'Itm'`, `'Line Item No'`, `'Doc. Item'`.
+     - **Validation Columns (Required)**:
+       - `'Document Type'` (`'Doc. Type'`, `'Doc Type'`, `'Type'`, `'BLART'`)
+       - `'Posting Date'` (`'Post. Date'`, `'Pstng Date'`, `'BUDAT'`)
+       - `'G/L Account'` (`'G/L'`, `'GL Account'`, `'HKONT'`, `'RACCT'`)
+     - **Target Assignment (Required)**: `'KODE PROJECT'`
+     - **Optional Metadata**: `'Source Data'` (defaults to `'BEBAN'` if omitted in pure FBL3N exports; if provided, must be `'BEBAN'` or `'VENDOR'`), `'Account'`.
    - If any required column is missing, raise fatal exception `lcx_bulk_error` listing the missing columns.
 2. **Data Rows (Row 2..N)**:
-   - If `Doc Number + Year` is empty/whitespace, skip the row silently.
-   - If `strlen( key ) < 5`, log an `EXCEL_ERROR` row (`bad 'Doc Number + Year'`).
-   - Split `key`:
-     - `year` = last 4 characters (`key+lv_off(4)`), must be 4 digits (`CO '0123456789'`).
-     - `doc` = prefix before last 4 characters, padded to 10 characters with leading zeros (`|{ lv_doc_raw ALPHA = IN }|` / `10`-char zero-padded).
-   - `Source Data` = trimmed, uppercased: must be `'BEBAN'` or `'VENDOR'`; otherwise record `EXCEL_ERROR`.
+   - If both `Doc Number + Year` and `Document Number` are empty/whitespace, skip the row silently.
+   - Normalize `BELNR` to 10 characters with leading zeros (`normalize_belnr`) and validate 4-digit `GJAHR`.
+   - Normalize `BUZEI` to 3-digit `NUMC` (`'1'` $\rightarrow$ `'001'`, `'002'` $\rightarrow$ `'002'`, `'1.0'` $\rightarrow$ `'001'`); record `EXCEL_ERROR` if empty, non-numeric, `0`, or $> 999$.
+   - Parse `Posting Date` via `lcl_types=>parse_excel_date` (handles Excel integer serials such as `43496` $\rightarrow$ `20190131`, `YYYYMMDD`, `YYYY-MM-DD`, `DD.MM.YYYY`, `DD/MM/YYYY`); record `EXCEL_ERROR` if empty or invalid.
+   - Verify `Document Type` and `G/L Account` are non-empty; otherwise record `EXCEL_ERROR`.
    - `KODE PROJECT` = trimmed: must be non-empty and `strlen( target ) <= 18`; otherwise record `EXCEL_ERROR`.
-   - Preserve document discovery order (matching Python's `OrderedDict`) and apply `P_LIMIT` to the first $N$ distinct `(doc, year)` pairs.
+   - Preserve document discovery order and apply `P_LIMIT` to the first $N$ distinct `(doc, year)` pairs.
 
-### 3.3 Database Lookup & Line Resolution (`lcl_db_provider` & `lcl_orchestrator`)
+### 3.3 Database Lookup, Line Resolution & Field Validation (`lcl_db_provider` & `lcl_orchestrator`)
 1. **Authorization Check**:
-   - Check `F_BKPF_BUK` with `BUKRS = p_bukrs` and `ACTVT = '02'` (Change) for Live/Test run, or `ACTVT = '03'` (Display) for Dry Run.
+   - Check `F_BKPF_BUK` with `BUKRS = p_bukrs` and `ACTVT = '02'` (Change) for Live/Test run.
 2. **Bulk `ACDOCA` + `BSEG` Lookup**:
-   - Query `ACDOCA` for `RBUKRS = @p_bukrs`, `RLDNR = @p_rldnr`, and `FOR ALL ENTRIES IN @lt_doc_keys` (`BELNR = @lt_doc_keys-doc AND GJAHR = @lt_doc_keys-year`), retrieving `BELNR`, `GJAHR`, `DOCLN`, `RACCT`, `ZUONR`.
+   - Query `ACDOCA` for `RBUKRS = @p_bukrs`, `RLDNR = @p_rldnr`, and `FOR ALL ENTRIES IN @lt_doc_keys` (`BELNR = @lt_doc_keys-doc AND GJAHR = @lt_doc_keys-year`), retrieving `BELNR`, `GJAHR`, `DOCLN`, `RACCT`, `BLART`, `BUDAT`, `ZUONR`.
    - Query `BSEG` for `AUGBL` (Clearing Document) to flag cleared items.
    - Item number `BUZEI` = last 3 characters of `ACDOCA-DOCLN` (`docln+3(3)`).
-3. **Line Matching (`resolve_line`)**:
-   - Strip leading zeros from both `ACDOCA-RACCT` and the Excel `G/L Account` (`strip_leading_zeros`).
-   - For a given Excel row `(doc, year, gl_account)`:
+3. **Key Resolution & Validation (`resolve_line`)**:
+   - For a given Excel row `(doc, year, item, blart, budat, gl, target)` under company code `P_BUKRS`:
      - If document `(doc, year)` has no lines in `ACDOCA` $\rightarrow$ status = `DOC_NOT_FOUND`.
-     - Filter document lines where `strip0( racct ) = strip0( gl_account )`:
-       - `0` hits $\rightarrow$ status = `NO_MATCH`.
-       - `> 1` hits $\rightarrow$ status = `AMBIGUOUS`.
-       - `1` hit and `line-zuonr = row-target` $\rightarrow$ status = `SKIPPED_ALREADY_SET`.
-       - `1` hit and `line-zuonr <> row-target` $\rightarrow$ status = `PLANNED` (if `augbl IS NOT INITIAL`, add warning message `'Cleared item (AUGBL=' && augbl && '); check OB32 if rejected'`).
+     - Look up line item where `item = row-item` (`BUZEI`):
+       - If not found $\rightarrow$ status = `ITEM_NOT_FOUND` (`Line item (BUZEI) ... not found in document ...`).
+     - Validate the 3 validation fields against the matched `ACDOCA` line:
+       1. `to_upper( condense( row-blart ) ) = to_upper( condense( item-blart ) )` (Document Type)
+       2. `row-budat = item-budat` (Posting Date)
+       3. `strip_leading_zeros( row-gl ) = strip_leading_zeros( item-racct )` (G/L Account)
+     - If one or more validation fields mismatch $\rightarrow$ status = `VALIDATION_FAILED` with detailed mismatch message (`Document Type mismatch ...; Posting Date mismatch ...; G/L Account mismatch ...`).
+     - If all 3 validation fields match:
+       - If `item-assignment = row-target` $\rightarrow$ status = `SKIPPED_ALREADY_SET`.
+       - If `item-assignment <> row-target` $\rightarrow$ status = `PLANNED` (if `augbl IS NOT INITIAL`, add warning message `'Cleared item (AUGBL=' && augbl && '); verify OB32 field status'`).
 
 ### 3.4 Document Change & Verification (`lcl_fi_doc_changer`)
 - Group all `PLANNED` rows by `(doc, year)`.
@@ -141,9 +156,9 @@ The report includes self-contained local test classes executable via `Ctrl+Shift
 
 | Test Class | Test Cases | What It Verifies |
 |---|---|---|
-| `ltcl_xlsx_reader_test` | `test_col_letters_to_index`<br>`test_parse_in_memory_xlsx`<br>`test_rich_text_and_inline_str`<br>`test_leading_slash_sheet_path` | Builds a real `.xlsx` ZIP archive in memory using `CL_ABAP_ZIP` (containing `[Content_Types].xml`, `xl/workbook.xml`, `xl/_rels/workbook.xml.rels`, `xl/sharedStrings.xml`, and `xl/worksheets/sheet1.xml`), feeds the `XSTRING` to `lcl_xlsx_reader=>parse( )`, and asserts exact cell extraction across shared strings (`t="s"`), rich-text runs (`<r><t>`), inline strings (`t="inlineStr"`), formula strings (`t="str"`), numeric cells, and sparse columns (`A`, `F`, `I`, `Y`, `AA`). |
-| `ltcl_excel_parser_test` | `test_valid_rows_and_padding`<br>`test_missing_columns_raises`<br>`test_invalid_rows_logged`<br>`test_doc_limit_preserves_order` | Verifies 10-digit `BELNR` zero-padding (`1000041372019` $\rightarrow$ `0100004137` / `2019`), `BEBAN`/`VENDOR` validation, 18-char `KODE PROJECT` limit, blank-row skipping, error collection, and `--limit N` document slicing. |
-| `ltcl_orchestrator_test` | `test_line_resolution_states`<br>`test_dry_run_no_changer_call`<br>`test_live_exec_and_verify`<br>`test_doc_rollback_on_error`<br>`test_csv_formatting` | Uses test doubles (`ltd_mock_db`, `ltd_mock_changer`) implementing `lif_db_provider` and `lif_doc_changer` to verify all status transitions (`PLANNED`, `SKIPPED_ALREADY_SET`, `DOC_NOT_FOUND`, `NO_MATCH`, `AMBIGUOUS`, `CHANGED`, `NOT_CHANGED`, `SEND_ERROR`) and RFC-4180 CSV export output. |
+| `ltcl_xlsx_reader_test` | `test_col_letters_to_index`<br>`test_parse_openpyxl_mac_win`<br>`test_rich_text_and_phonetic`<br>`test_leading_slash_rel_path` | Builds a real `.xlsx` ZIP archive in memory using `CL_ABAP_ZIP` (containing `xl/workbook.xml`, `xl/_rels/workbook.xml.rels`, `xl/sharedStrings.xml`, and `xl/worksheets/sheet1.xml`), feeds the `XSTRING` to `lcl_xlsx_reader=>parse( )`, and asserts exact cell extraction across shared strings (`t="s"`), rich-text runs (`<r><t>`), inline strings (`t="inlineStr"`), formula strings (`t="str"`), numeric cells, and sparse columns (`A`, `F`, `I`, `Y`, `AA`). |
+| `ltcl_excel_parser_test` | `test_valid_and_invalid_rows`<br>`test_separate_doc_and_year_col`<br>`test_limit_documents`<br>`test_missing_header_raises` | Verifies 10-digit `BELNR` zero-padding, 3-digit `BUZEI` normalization (`1` $\rightarrow$ `001`), Excel serial & string `Posting Date` parsing (`43496` $\rightarrow$ `20190131`, `2019-01-31`, `28.02.2019`), separate `Document Number` + `Buzei` FBL3N columns, 18-char `KODE PROJECT` limit, error collection, and `--limit N` document slicing. |
+| `ltcl_orchestrator_test` | `test_all_resolution_statuses`<br>`test_validation_mismatches`<br>`test_dry_run_vs_live_exec`<br>`test_error_and_csv_export` | Uses test doubles (`ltd_mock_db`, `ltd_mock_changer`) implementing `lif_db_provider` and `lif_doc_changer` to verify `(BUKRS, BELNR, GJAHR, BUZEI)` lookup (including disambiguating lines with identical G/L accounts by `BUZEI`), `VALIDATION_FAILED` on Document Type / Posting Date / G/L Account mismatches, status transitions (`PLANNED`, `SKIPPED_ALREADY_SET`, `DOC_NOT_FOUND`, `ITEM_NOT_FOUND`, `VALIDATION_FAILED`, `CHANGED`, `SEND_ERROR`), and RFC-4180 CSV export output. |
 
 ### 4.2 SAP Code Inspector (SCI) & Transport Readiness Checklist
 - **No obsolete statements**: No `TABLES`, no header-line internal tables, no `OCCURS`, no `FORM`/`PERFORM` (100% ABAP Objects local classes + clean report events).
@@ -159,5 +174,5 @@ The report includes self-contained local test classes executable via `Ctrl+Shift
 | File | Description |
 |---|---|
 | [`ABAP_ZPROGRAM_PLAN.md`](ABAP_ZPROGRAM_PLAN.md) | Architectural plan, cross-platform `.xlsx` specification, business logic contract, and ABAP Unit test plan. |
-| [`zfi_bulk_change_assign.abap`](zfi_bulk_change_assign.abap) | Complete ABAP Z-Program (`ZFI_BULK_CHANGE_ASSIGN`) with cross-platform `.xlsx` parser, `ACDOCA` resolution engine, `FI_DOCUMENT_CHANGE` updater, ALV + CSV output, and embedded ABAP Unit test suite. |
-| [`test_abap_xlsx_logic.py`](test_abap_xlsx_logic.py) | Automated verification test suite simulating the exact `lcl_xlsx_reader` state machine and `lcl_excel_parser` rules against `Contoh Data SAP for change Assignment.xlsx` and synthetic macOS/Windows `.xlsx` edge cases. |
+| [`zfi_bulk_change_assign.abap`](zfi_bulk_change_assign.abap) | Complete ABAP Z-Program (`ZFI_BULK_CHANGE_ASSIGN`) with cross-platform `.xlsx` parser, `(BUKRS, BELNR, GJAHR, BUZEI)` resolution engine, `(BLART, BUDAT, RACCT)` validation, `FI_DOCUMENT_CHANGE` updater, ALV + CSV output, and embedded ABAP Unit test suite. |
+| [`test_abap_xlsx_logic.py`](test_abap_xlsx_logic.py) | Automated verification test suite simulating the exact `lcl_xlsx_reader` state machine, `lcl_excel_parser` rules, and `lcl_orchestrator` validation logic. |

@@ -54,6 +54,8 @@ CLASS lcl_types DEFINITION FINAL.
         planned             TYPE string VALUE 'PLANNED',
         skipped_already_set TYPE string VALUE 'SKIPPED_ALREADY_SET',
         doc_not_found       TYPE string VALUE 'DOC_NOT_FOUND',
+        item_not_found      TYPE string VALUE 'ITEM_NOT_FOUND',
+        validation_failed   TYPE string VALUE 'VALIDATION_FAILED',
         no_match            TYPE string VALUE 'NO_MATCH',
         ambiguous           TYPE string VALUE 'AMBIGUOUS',
         testrun_ok          TYPE string VALUE 'TESTRUN_OK',
@@ -87,8 +89,11 @@ CLASS lcl_types DEFINITION FINAL.
         xl_row  TYPE i,
         doc     TYPE belnr_d,
         year    TYPE gjahr,
+        item    TYPE buzei,
         source  TYPE string,
         gl      TYPE string,
+        blart   TYPE blart,
+        budat   TYPE budat,
         account TYPE string,
         target  TYPE dzuonr,
       END OF ty_excel_row,
@@ -111,6 +116,8 @@ CLASS lcl_types DEFINITION FINAL.
         year       TYPE gjahr,
         item       TYPE buzei,
         racct      TYPE racct,
+        blart      TYPE blart,
+        budat      TYPE budat,
         assignment TYPE dzuonr,
         augbl      TYPE augbl,
       END OF ty_acdoca_item,
@@ -123,6 +130,8 @@ CLASS lcl_types DEFINITION FINAL.
         year    TYPE gjahr,
         item    TYPE buzei,
         source  TYPE char10,
+        blart   TYPE blart,
+        budat   TYPE budat,
         gl      TYPE saknr,
         old     TYPE dzuonr,
         target  TYPE dzuonr,
@@ -146,6 +155,14 @@ CLASS lcl_types DEFINITION FINAL.
     CLASS-METHODS normalize_belnr
       IMPORTING iv_doc        TYPE clike
       RETURNING VALUE(rv_doc) TYPE belnr_d.
+
+    CLASS-METHODS normalize_buzei
+      IMPORTING iv_buzei        TYPE clike
+      RETURNING VALUE(rv_buzei) TYPE buzei.
+
+    CLASS-METHODS parse_excel_date
+      IMPORTING iv_raw         TYPE clike
+      RETURNING VALUE(rv_date) TYPE budat.
 ENDCLASS.
 
 CLASS lcl_types IMPLEMENTATION.
@@ -162,6 +179,97 @@ CLASS lcl_types IMPLEMENTATION.
       ENDWHILE.
     ENDIF.
     rv_doc = CONV belnr_d( lv_str ).
+  ENDMETHOD.
+
+  METHOD normalize_buzei.
+    DATA(lv_str) = condense( val = CONV string( iv_buzei ) ).
+    IF lv_str IS INITIAL.
+      RETURN.
+    ENDIF.
+    " Strip optional decimal suffix (e.g. '1.0' -> '1')
+    FIND FIRST OCCURRENCE OF '.' IN lv_str MATCH OFFSET DATA(lv_dot).
+    IF sy-subrc = 0 AND lv_dot > 0.
+      lv_str = lv_str(lv_dot).
+    ENDIF.
+    SHIFT lv_str LEFT DELETING LEADING '0'.
+    IF lv_str IS INITIAL OR NOT ( lv_str CO '0123456789' ) OR strlen( lv_str ) > 3.
+      RETURN.
+    ENDIF.
+    WHILE strlen( lv_str ) < 3.
+      lv_str = '0' && lv_str.
+    ENDWHILE.
+    rv_buzei = CONV buzei( lv_str ).
+  ENDMETHOD.
+
+  METHOD parse_excel_date.
+    DATA(lv_raw) = condense( val = CONV string( iv_raw ) ).
+    IF lv_raw IS INITIAL.
+      RETURN.
+    ENDIF.
+
+    " Strip optional time or float fractional suffix from Excel serials (e.g. '43496.0' -> '43496')
+    DATA(lv_num_part) = lv_raw.
+    FIND FIRST OCCURRENCE OF '.' IN lv_num_part MATCH OFFSET DATA(lv_dot_off).
+    IF sy-subrc = 0 AND lv_dot_off > 0.
+      DATA(lv_frac) = lv_num_part+lv_dot_off.
+      SHIFT lv_frac LEFT DELETING LEADING '.'.
+      IF lv_frac CO '0'.
+        lv_num_part = lv_num_part(lv_dot_off).
+      ENDIF.
+    ENDIF.
+
+    " 1. Excel integer date serial (e.g. 43496 -> 20190131, 1899-12-30 epoch)
+    IF lv_num_part CO '0123456789' AND strlen( lv_num_part ) >= 4 AND strlen( lv_num_part ) <= 6.
+      DATA(lv_serial) = CONV i( lv_num_part ).
+      IF lv_serial >= 1 AND lv_serial <= 2958465.
+        DATA(lv_epoch) = CONV d( '18991230' ).
+        rv_date = lv_epoch + lv_serial.
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    " 2. Already YYYYMMDD (8 digits)
+    IF strlen( lv_raw ) = 8 AND lv_raw CO '0123456789'.
+      rv_date = CONV budat( lv_raw ).
+      RETURN.
+    ENDIF.
+
+    " 3. Delimited formats: YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD, DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY
+    DATA lt_parts TYPE string_table.
+    IF lv_raw CS '-'.
+      SPLIT lv_raw AT '-' INTO TABLE lt_parts.
+    ELSEIF lv_raw CS '.'.
+      SPLIT lv_raw AT '.' INTO TABLE lt_parts.
+    ELSEIF lv_raw CS '/'.
+      SPLIT lv_raw AT '/' INTO TABLE lt_parts.
+    ENDIF.
+
+    IF lines( lt_parts ) = 3.
+      DATA(lv_p1) = condense( val = lt_parts[ 1 ] ).
+      DATA(lv_p2) = condense( val = lt_parts[ 2 ] ).
+      DATA(lv_p3) = condense( val = lt_parts[ 3 ] ).
+      " Strip any trailing time component (e.g. '31 00:00:00')
+      SPLIT lv_p3 AT ' ' INTO lv_p3 DATA(lv_rest).
+      IF lv_p1 CO '0123456789' AND lv_p2 CO '0123456789' AND lv_p3 CO '0123456789'.
+        IF strlen( lv_p1 ) = 4.
+          " YYYY-MM-DD
+          IF strlen( lv_p2 ) = 1. lv_p2 = '0' && lv_p2. ENDIF.
+          IF strlen( lv_p3 ) = 1. lv_p3 = '0' && lv_p3. ENDIF.
+          IF strlen( lv_p2 ) = 2 AND strlen( lv_p3 ) = 2.
+            rv_date = CONV budat( lv_p1 && lv_p2 && lv_p3 ).
+            RETURN.
+          ENDIF.
+        ELSEIF strlen( lv_p3 ) = 4.
+          " DD.MM.YYYY or DD/MM/YYYY
+          IF strlen( lv_p1 ) = 1. lv_p1 = '0' && lv_p1. ENDIF.
+          IF strlen( lv_p2 ) = 1. lv_p2 = '0' && lv_p2. ENDIF.
+          IF strlen( lv_p1 ) = 2 AND strlen( lv_p2 ) = 2.
+            rv_date = CONV budat( lv_p3 && lv_p2 && lv_p1 ).
+            RETURN.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
   ENDMETHOD.
 ENDCLASS.
 
@@ -554,7 +662,11 @@ CLASS lcl_xlsx_reader IMPLEMENTATION.
 ENDCLASS.
 
 *======================================================================*
-* Excel Business Validator & Header Mapper (Matches change_assignment.py)
+* Excel Business Validator & Header Mapper
+*   - Supports FBL3N Buzei / Line Item column ('BUZEI', 'LINE ITEM', 'ITEM', 'ITM')
+*   - Supports combined 'Doc Number + Year' OR separate 'Document Number' +
+*     'Fiscal Year'/'Year' (or year derived from 'Posting Date')
+*   - Validates required validation fields: Document Type, Posting Date, G/L Account
 *======================================================================*
 CLASS lcl_excel_parser DEFINITION FINAL.
   PUBLIC SECTION.
@@ -580,6 +692,9 @@ ENDCLASS.
 
 CLASS lcl_excel_parser IMPLEMENTATION.
   METHOD get_cell_value.
+    IF iv_col <= 0.
+      RETURN.
+    ENDIF.
     READ TABLE it_cells INTO DATA(ls_cell) WITH TABLE KEY col = iv_col.
     IF sy-subrc = 0.
       rv_val = ls_cell-value.
@@ -598,8 +713,13 @@ CLASS lcl_excel_parser IMPLEMENTATION.
     READ TABLE it_sheet_rows INTO DATA(ls_header_row) INDEX 1.
     DATA:
       lv_col_doc_year TYPE i,
+      lv_col_doc_no   TYPE i,
+      lv_col_year     TYPE i,
+      lv_col_buzei    TYPE i,
       lv_col_source   TYPE i,
       lv_col_gl       TYPE i,
+      lv_col_blart    TYPE i,
+      lv_col_budat    TYPE i,
       lv_col_account  TYPE i,
       lv_col_target   TYPE i.
 
@@ -607,24 +727,37 @@ CLASS lcl_excel_parser IMPLEMENTATION.
       DATA(lv_hname) = to_upper( condense( val = ls_hcell-value ) ).
       CASE lv_hname.
         WHEN 'DOC NUMBER + YEAR'.
-          lv_col_doc_year = ls_hcell-col.
+          IF lv_col_doc_year = 0. lv_col_doc_year = ls_hcell-col. ENDIF.
+        WHEN 'DOCUMENT NUMBER' OR 'DOC NUMBER' OR 'DOC. NO.' OR 'DOCUMENT NO' OR 'BELNR'.
+          IF lv_col_doc_no = 0. lv_col_doc_no = ls_hcell-col. ENDIF.
+        WHEN 'FISCAL YEAR' OR 'YEAR' OR 'GJAHR'.
+          IF lv_col_year = 0. lv_col_year = ls_hcell-col. ENDIF.
+        WHEN 'BUZEI' OR 'LINE ITEM' OR 'ITEM' OR 'ITM' OR 'LINE ITEM NO' OR 'DOC. ITEM'.
+          IF lv_col_buzei = 0. lv_col_buzei = ls_hcell-col. ENDIF.
         WHEN 'SOURCE DATA'.
-          lv_col_source = ls_hcell-col.
-        WHEN 'G/L ACCOUNT'.
-          lv_col_gl = ls_hcell-col.
+          IF lv_col_source = 0. lv_col_source = ls_hcell-col. ENDIF.
+        WHEN 'G/L ACCOUNT' OR 'G/L' OR 'GL ACCOUNT' OR 'HKONT' OR 'RACCT'.
+          IF lv_col_gl = 0. lv_col_gl = ls_hcell-col. ENDIF.
+        WHEN 'DOCUMENT TYPE' OR 'DOC. TYPE' OR 'DOC TYPE' OR 'TYPE' OR 'BLART'.
+          IF lv_col_blart = 0. lv_col_blart = ls_hcell-col. ENDIF.
+        WHEN 'POSTING DATE' OR 'POST. DATE' OR 'PSTNG DATE' OR 'BUDAT'.
+          IF lv_col_budat = 0. lv_col_budat = ls_hcell-col. ENDIF.
         WHEN 'ACCOUNT'.
-          lv_col_account = ls_hcell-col.
+          IF lv_col_account = 0. lv_col_account = ls_hcell-col. ENDIF.
         WHEN 'KODE PROJECT'.
-          lv_col_target = ls_hcell-col.
+          IF lv_col_target = 0. lv_col_target = ls_hcell-col. ENDIF.
       ENDCASE.
     ENDLOOP.
 
     DATA lt_missing TYPE string_table.
-    IF lv_col_doc_year = 0. APPEND `'Doc Number + Year'` TO lt_missing. ENDIF.
-    IF lv_col_source   = 0. APPEND `'Source Data'`       TO lt_missing. ENDIF.
-    IF lv_col_gl       = 0. APPEND `'G/L Account'`       TO lt_missing. ENDIF.
-    IF lv_col_account  = 0. APPEND `'Account'`           TO lt_missing. ENDIF.
-    IF lv_col_target   = 0. APPEND `'KODE PROJECT'`      TO lt_missing. ENDIF.
+    IF lv_col_doc_year = 0 AND lv_col_doc_no = 0.
+      APPEND `'Doc Number + Year' (or 'Document Number')` TO lt_missing.
+    ENDIF.
+    IF lv_col_buzei  = 0. APPEND `'Buzei' / 'Line Item'` TO lt_missing. ENDIF.
+    IF lv_col_blart  = 0. APPEND `'Document Type'`       TO lt_missing. ENDIF.
+    IF lv_col_budat  = 0. APPEND `'Posting Date'`        TO lt_missing. ENDIF.
+    IF lv_col_gl     = 0. APPEND `'G/L Account'`         TO lt_missing. ENDIF.
+    IF lv_col_target = 0. APPEND `'KODE PROJECT'`        TO lt_missing. ENDIF.
 
     IF lt_missing IS NOT INITIAL.
       DATA(lv_missing_str) = concat_lines_of( table = lt_missing sep = ', ' ).
@@ -636,33 +769,93 @@ CLASS lcl_excel_parser IMPLEMENTATION.
     DATA lt_all_rows TYPE lcl_types=>tt_excel_rows.
     LOOP AT it_sheet_rows INTO DATA(ls_srow) FROM 2.
       DATA(lv_key) = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_doc_year ) ).
-      IF lv_key IS INITIAL.
+      DATA(lv_doc_cell) = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_doc_no ) ).
+      DATA(lv_yr_cell)  = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_year ) ).
+
+      IF lv_key IS INITIAL AND lv_doc_cell IS INITIAL.
         CONTINUE.
       ENDIF.
 
-      IF strlen( lv_key ) < 5.
+      " Parse Posting Date early so fiscal year can fall back to Posting Date year when needed
+      DATA(lv_budat_raw) = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_budat ) ).
+      DATA(lv_budat)     = lcl_types=>parse_excel_date( lv_budat_raw ).
+
+      DATA lv_doc_raw  TYPE string.
+      DATA lv_year_raw TYPE string.
+      CLEAR: lv_doc_raw, lv_year_raw.
+
+      IF lv_key IS NOT INITIAL.
+        IF strlen( lv_key ) < 5.
+          APPEND VALUE #(
+            xl_row  = ls_srow-row_num
+            message = |bad 'Doc Number + Year': '{ lv_key }'| ) TO et_errors.
+          CONTINUE.
+        ENDIF.
+        DATA(lv_split_pos) = strlen( lv_key ) - 4.
+        lv_doc_raw  = lv_key(lv_split_pos).
+        lv_year_raw = lv_key+lv_split_pos(4).
+      ELSE.
+        lv_doc_raw = lv_doc_cell.
+        IF lv_yr_cell IS NOT INITIAL.
+          lv_year_raw = lv_yr_cell.
+        ELSEIF lv_budat IS NOT INITIAL.
+          lv_year_raw = lv_budat(4).
+        ENDIF.
+      ENDIF.
+
+      IF lv_doc_raw IS INITIAL OR strlen( lv_doc_raw ) > 10
+         OR strlen( lv_year_raw ) <> 4 OR NOT ( lv_year_raw CO '0123456789' ).
+        DATA(lv_err_key) = COND string( WHEN lv_key IS NOT INITIAL THEN lv_key ELSE |{ lv_doc_cell }/{ lv_yr_cell }| ).
         APPEND VALUE #(
           xl_row  = ls_srow-row_num
-          message = |bad 'Doc Number + Year': '{ lv_key }'| ) TO et_errors.
+          message = |bad Document Number / Year: '{ lv_err_key }'| ) TO et_errors.
         CONTINUE.
       ENDIF.
 
-      DATA(lv_split_pos) = strlen( lv_key ) - 4.
-      DATA(lv_doc_raw)   = lv_key(lv_split_pos).
-      DATA(lv_year_raw)  = lv_key+lv_split_pos(4).
-
-      IF NOT ( lv_year_raw CO '0123456789' ) OR strlen( lv_doc_raw ) > 10.
+      " Validate Buzei / Line Item
+      DATA(lv_buzei_raw) = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_buzei ) ).
+      DATA(lv_buzei)     = lcl_types=>normalize_buzei( lv_buzei_raw ).
+      IF lv_buzei IS INITIAL.
         APPEND VALUE #(
           xl_row  = ls_srow-row_num
-          message = |bad 'Doc Number + Year': '{ lv_key }'| ) TO et_errors.
+          message = |bad or empty Buzei / Line Item: '{ lv_buzei_raw }'| ) TO et_errors.
         CONTINUE.
       ENDIF.
 
+      " Optional Source Data (default to BEBAN if column is omitted in pure FBL3N exports)
       DATA(lv_source) = to_upper( condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_source ) ) ).
-      IF lv_source <> lcl_types=>c_source_beban AND lv_source <> lcl_types=>c_source_vendor.
+      IF lv_col_source > 0 AND lv_source IS NOT INITIAL.
+        IF lv_source <> lcl_types=>c_source_beban AND lv_source <> lcl_types=>c_source_vendor.
+          APPEND VALUE #(
+            xl_row  = ls_srow-row_num
+            message = |unknown Source Data '{ lv_source }'| ) TO et_errors.
+          CONTINUE.
+        ENDIF.
+      ELSEIF lv_source IS INITIAL.
+        lv_source = lcl_types=>c_source_beban.
+      ENDIF.
+
+      " Validate required validation fields in Excel: Document Type, Posting Date, G/L Account
+      DATA(lv_blart_raw) = to_upper( condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_blart ) ) ).
+      IF lv_blart_raw IS INITIAL.
         APPEND VALUE #(
           xl_row  = ls_srow-row_num
-          message = |unknown Source Data '{ lv_source }'| ) TO et_errors.
+          message = 'Document Type is empty' ) TO et_errors.
+        CONTINUE.
+      ENDIF.
+
+      IF lv_budat IS INITIAL.
+        APPEND VALUE #(
+          xl_row  = ls_srow-row_num
+          message = |bad or empty Posting Date: '{ lv_budat_raw }'| ) TO et_errors.
+        CONTINUE.
+      ENDIF.
+
+      DATA(lv_gl_raw) = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_gl ) ).
+      IF lv_gl_raw IS INITIAL.
+        APPEND VALUE #(
+          xl_row  = ls_srow-row_num
+          message = 'G/L Account is empty' ) TO et_errors.
         CONTINUE.
       ENDIF.
 
@@ -688,8 +881,11 @@ CLASS lcl_excel_parser IMPLEMENTATION.
         xl_row  = ls_srow-row_num
         doc     = lv_doc_10
         year    = lv_year_4
+        item    = lv_buzei
         source  = lv_source
-        gl      = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_gl ) )
+        gl      = lv_gl_raw
+        blart   = CONV blart( lv_blart_raw )
+        budat   = lv_budat
         account = condense( val = get_cell_value( it_cells = ls_srow-cells iv_col = lv_col_account ) )
         target  = CONV dzuonr( lv_target ) ) TO lt_all_rows.
     ENDLOOP.
@@ -768,6 +964,8 @@ CLASS lcl_db_provider IMPLEMENTATION.
         gjahr TYPE gjahr,
         docln TYPE docln6,
         racct TYPE racct,
+        blart TYPE blart,
+        budat TYPE budat,
         zuonr TYPE dzuonr,
       END OF ty_acdoca_raw,
       BEGIN OF ty_bseg_raw,
@@ -782,7 +980,7 @@ CLASS lcl_db_provider IMPLEMENTATION.
       lt_bseg   TYPE SORTED TABLE OF ty_bseg_raw WITH UNIQUE KEY belnr gjahr buzei.
 
     IF iv_bypass_buffer = abap_true.
-      SELECT belnr, gjahr, docln, racct, zuonr
+      SELECT belnr, gjahr, docln, racct, blart, budat, zuonr
         FROM acdoca
         BYPASSING BUFFER
         INTO TABLE @lt_acdoca
@@ -792,7 +990,7 @@ CLASS lcl_db_provider IMPLEMENTATION.
           AND belnr  = @lt_keys-doc
           AND gjahr  = @lt_keys-year.
     ELSE.
-      SELECT belnr, gjahr, docln, racct, zuonr
+      SELECT belnr, gjahr, docln, racct, blart, budat, zuonr
         FROM acdoca
         INTO TABLE @lt_acdoca
         FOR ALL ENTRIES IN @lt_keys
@@ -827,6 +1025,8 @@ CLASS lcl_db_provider IMPLEMENTATION.
         year       = ls_ac-gjahr
         item       = lv_buzei
         racct      = ls_ac-racct
+        blart      = ls_ac-blart
+        budat      = ls_ac-budat
         assignment = ls_ac-zuonr
         augbl      = lv_augbl ) TO rt_items.
     ENDLOOP.
@@ -1039,26 +1239,47 @@ CLASS lcl_orchestrator IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    DATA(lv_target_gl) = lcl_types=>strip_leading_zeros( is_row-gl ).
+    " 1. Determine row to update from (Company Code, Doc Number, Year, Buzei)
     DATA lt_hits TYPE lcl_types=>tt_acdoca_items.
-
-    LOOP AT it_doc_items INTO DATA(ls_item).
-      IF lcl_types=>strip_leading_zeros( ls_item-racct ) = lv_target_gl.
-        APPEND ls_item TO lt_hits.
-      ENDIF.
+    LOOP AT it_doc_items INTO DATA(ls_item)
+      WHERE item = is_row-item.
+      APPEND ls_item TO lt_hits.
     ENDLOOP.
 
     IF lt_hits IS INITIAL.
-      ev_status  = lcl_types=>c_status-no_match.
-      ev_message = |No ACDOCA line matches G/L Account { is_row-gl }|.
-      RETURN.
-    ELSEIF lines( lt_hits ) > 1.
-      ev_status  = lcl_types=>c_status-ambiguous.
-      ev_message = |Multiple ({ lines( lt_hits ) }) ACDOCA lines match G/L Account { is_row-gl }|.
+      ev_status  = lcl_types=>c_status-item_not_found.
+      ev_message = |Line item (BUZEI) { is_row-item } not found in document { is_row-doc }/{ is_row-year }|.
       RETURN.
     ENDIF.
 
     READ TABLE lt_hits INTO es_item INDEX 1.
+
+    " 2. Validate Document Type (BLART), Posting Date (BUDAT), and G/L Account (RACCT)
+    DATA lt_mismatches TYPE string_table.
+
+    DATA(lv_exp_blart) = to_upper( condense( val = CONV string( is_row-blart ) ) ).
+    DATA(lv_act_blart) = to_upper( condense( val = CONV string( es_item-blart ) ) ).
+    IF lv_exp_blart <> lv_act_blart.
+      APPEND |Document Type mismatch (Excel='{ lv_exp_blart }', SAP='{ lv_act_blart }')| TO lt_mismatches.
+    ENDIF.
+
+    IF is_row-budat <> es_item-budat.
+      APPEND |Posting Date mismatch (Excel='{ is_row-budat }', SAP='{ es_item-budat }')| TO lt_mismatches.
+    ENDIF.
+
+    DATA(lv_exp_gl) = lcl_types=>strip_leading_zeros( is_row-gl ).
+    DATA(lv_act_gl) = lcl_types=>strip_leading_zeros( es_item-racct ).
+    IF lv_exp_gl <> lv_act_gl.
+      APPEND |G/L Account mismatch (Excel='{ is_row-gl }', SAP='{ lv_act_gl }')| TO lt_mismatches.
+    ENDIF.
+
+    IF lt_mismatches IS NOT INITIAL.
+      ev_status  = lcl_types=>c_status-validation_failed.
+      ev_message = concat_lines_of( table = lt_mismatches sep = '; ' ).
+      RETURN.
+    ENDIF.
+
+    " 3. Check if Assignment (ZUONR) is already set to target
     IF es_item-assignment = is_row-target.
       ev_status  = lcl_types=>c_status-skipped_already_set.
       ev_message = 'Assignment already equals target value'.
@@ -1093,7 +1314,7 @@ CLASS lcl_orchestrator IMPLEMENTATION.
       it_doc_keys      = it_doc_keys
       iv_bypass_buffer = abap_false ).
 
-    " 2. Resolve each Excel row to an exact ACDOCA line item
+    " 2. Resolve each Excel row to an exact ACDOCA line item by (BUKRS, BELNR, GJAHR, BUZEI)
     LOOP AT it_doc_keys INTO DATA(ls_dkey).
       DATA lt_doc_items TYPE lcl_types=>tt_acdoca_items.
       CLEAR lt_doc_items.
@@ -1124,8 +1345,10 @@ CLASS lcl_orchestrator IMPLEMENTATION.
           xl_row  = ls_xrow-xl_row
           doc     = ls_xrow-doc
           year    = ls_xrow-year
-          item    = ls_matched-item
+          item    = ls_xrow-item
           source  = CONV char10( ls_xrow-source )
+          blart   = ls_xrow-blart
+          budat   = ls_xrow-budat
           gl      = CONV saknr( ls_xrow-gl )
           old     = ls_matched-assignment
           target  = ls_xrow-target
@@ -1522,6 +1745,7 @@ CLASS lcl_alv_presenter IMPLEMENTATION.
       ULINE.
       LOOP AT lt_display INTO ls_row.
         WRITE: / ls_row-doc, ls_row-year, ls_row-item, ls_row-source,
+                 ls_row-blart, ls_row-budat, ls_row-gl,
                  ls_row-old, '->', ls_row-target, ls_row-status, ls_row-message(80).
       ENDLOOP.
       RETURN.
@@ -1680,7 +1904,7 @@ START-OF-SELECTION.
         ENDLOOP.
 
         IF lv_n_planned = 0.
-          MESSAGE |Nothing to change: 0 planned lines ({ lv_n_skipped } already set, { lv_n_unres } unresolved, { lv_n_excel } Excel errors).| TYPE 'I'.
+          MESSAGE |Nothing to change: 0 planned lines ({ lv_n_skipped } already set, { lv_n_unres } unresolved/validation failed, { lv_n_excel } Excel errors).| TYPE 'I'.
           lcl_alv_presenter=>display(
             iv_bukrs = p_bukrs
             iv_mode  = lcl_types=>c_mode-dry_run
@@ -1692,7 +1916,7 @@ START-OF-SELECTION.
           |Modify Assignment (ZUONR) in Company { p_bukrs }? | &&
           |Planned: { lv_n_planned } line(s) on { lines( lt_planned_docs ) } document(s). | &&
           |Skipped (already set): { lv_n_skipped }. | &&
-          |Unresolved (not found/no match/ambiguous): { lv_n_unres }. | &&
+          |Unresolved / Validation failed: { lv_n_unres }. | &&
           |Excel errors: { lv_n_excel }.|.
 
         CALL FUNCTION 'POPUP_TO_CONFIRM'
@@ -1748,7 +1972,9 @@ START-OF-SELECTION.
 *======================================================================*
 * ABAP Unit Test Suite (Ctrl+Shift+F10 in SE38 / Eclipse ADT)
 *   Tests cross-platform .xlsx parsing, Excel validation, line
-*   resolution, execution modes, rollback, verification, and CSV export.
+*   resolution by (BUKRS, BELNR, GJAHR, BUZEI), validation of
+*   (BLART, BUDAT, RACCT), execution modes, rollback, verification,
+*   and CSV export.
 *======================================================================*
 
 *----------------------------------------------------------------------*
@@ -1936,82 +2162,104 @@ CLASS ltcl_excel_parser_test DEFINITION FINAL FOR TESTING
     METHODS build_sample_sheet
       RETURNING VALUE(rt_sheet) TYPE lcl_types=>tt_sheet_rows.
 
-    METHODS test_valid_and_invalid_rows FOR TESTING RAISING lcx_bulk_error.
-    METHODS test_limit_documents        FOR TESTING RAISING lcx_bulk_error.
-    METHODS test_missing_header_raises  FOR TESTING.
+    METHODS test_valid_and_invalid_rows    FOR TESTING RAISING lcx_bulk_error.
+    METHODS test_separate_doc_and_year_col FOR TESTING RAISING lcx_bulk_error.
+    METHODS test_limit_documents           FOR TESTING RAISING lcx_bulk_error.
+    METHODS test_missing_header_raises     FOR TESTING.
 ENDCLASS.
 
 CLASS ltcl_excel_parser_test IMPLEMENTATION.
   METHOD build_sample_sheet.
-    " Row 1: Headers matching Contoh Data SAP for change Assignment.xlsx
+    " Row 1: Headers including Buzei / Line Item and validation fields
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 1
       cells   = VALUE #(
-        ( col = 1 value = 'Doc Number + Year' )
-        ( col = 2 value = 'Source Data' )
-        ( col = 6 value = 'G/L Account' )
-        ( col = 7 value = 'Account' )
-        ( col = 9 value = 'KODE PROJECT' ) ) ) TO rt_sheet.
+        ( col = 1  value = 'Doc Number + Year' )
+        ( col = 2  value = 'Source Data' )
+        ( col = 3  value = 'Line Item' )
+        ( col = 6  value = 'G/L Account' )
+        ( col = 7  value = 'Account' )
+        ( col = 9  value = 'KODE PROJECT' )
+        ( col = 10 value = 'Document Type' )
+        ( col = 20 value = 'Posting Date' ) ) ) TO rt_sheet.
 
-    " Row 2: Valid BEBAN line for doc 100004137 / 2019
+    " Row 2: Valid BEBAN line for doc 100004137 / 2019 item 1 (Excel date serial 43496 = 20190131)
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 2
       cells   = VALUE #(
-        ( col = 1 value = '1000041372019' )
-        ( col = 2 value = 'BEBAN' )
-        ( col = 6 value = '51376037' )
-        ( col = 7 value = '51376037' )
-        ( col = 9 value = 'P-1409SCC-TTES0601' ) ) ) TO rt_sheet.
+        ( col = 1  value = '1000041372019' )
+        ( col = 2  value = 'BEBAN' )
+        ( col = 3  value = '1' )
+        ( col = 6  value = '51376037' )
+        ( col = 7  value = '51376037' )
+        ( col = 9  value = 'P-1409SCC-TTES0601' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '43496' ) ) ) TO rt_sheet.
 
-    " Row 3: Valid VENDOR line for doc 100004137 / 2019
+    " Row 3: Valid VENDOR line for doc 100004137 / 2019 item 002
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 3
       cells   = VALUE #(
-        ( col = 1 value = '1000041372019' )
-        ( col = 2 value = 'VENDOR' )
-        ( col = 6 value = '20101002' )
-        ( col = 7 value = '99000024' )
-        ( col = 9 value = 'P-1409SCC-TTES0601' ) ) ) TO rt_sheet.
+        ( col = 1  value = '1000041372019' )
+        ( col = 2  value = 'VENDOR' )
+        ( col = 3  value = '002' )
+        ( col = 6  value = '20101002' )
+        ( col = 7  value = '99000024' )
+        ( col = 9  value = 'P-1409SCC-TTES0601' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '2019-01-31' ) ) ) TO rt_sheet.
 
-    " Row 4: Valid BEBAN line for 2nd doc 100010920 / 2019
+    " Row 4: Valid BEBAN line for 2nd doc 100010920 / 2019 item 1 (DD.MM.YYYY date)
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 4
       cells   = VALUE #(
-        ( col = 1 value = '1000109202019' )
-        ( col = 2 value = 'beban' )
-        ( col = 6 value = '51376037' )
-        ( col = 7 value = '51376037' )
-        ( col = 9 value = 'P-1411SCC-TTES0717' ) ) ) TO rt_sheet.
+        ( col = 1  value = '1000109202019' )
+        ( col = 2  value = 'beban' )
+        ( col = 3  value = '1' )
+        ( col = 6  value = '51376037' )
+        ( col = 7  value = '51376037' )
+        ( col = 9  value = 'P-1411SCC-TTES0717' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '28.02.2019' ) ) ) TO rt_sheet.
 
     " Row 5: Invalid short key (< 5 chars)
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 5
       cells   = VALUE #(
-        ( col = 1 value = '2019' )
-        ( col = 2 value = 'BEBAN' )
-        ( col = 6 value = '51376037' )
-        ( col = 7 value = '51376037' )
-        ( col = 9 value = 'P-1411SCC-TTES0717' ) ) ) TO rt_sheet.
+        ( col = 1  value = '2019' )
+        ( col = 2  value = 'BEBAN' )
+        ( col = 3  value = '1' )
+        ( col = 6  value = '51376037' )
+        ( col = 7  value = '51376037' )
+        ( col = 9  value = 'P-1411SCC-TTES0717' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '43524' ) ) ) TO rt_sheet.
 
-    " Row 6: Invalid Source Data
+    " Row 6: Invalid Buzei / Line Item
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 6
       cells   = VALUE #(
-        ( col = 1 value = '1000109372019' )
-        ( col = 2 value = 'CUSTOMER' )
-        ( col = 6 value = '51376037' )
-        ( col = 7 value = '51376037' )
-        ( col = 9 value = 'P-1411SCC-TTES0717' ) ) ) TO rt_sheet.
+        ( col = 1  value = '1000109372019' )
+        ( col = 2  value = 'BEBAN' )
+        ( col = 3  value = 'ABC' )
+        ( col = 6  value = '51376037' )
+        ( col = 7  value = '51376037' )
+        ( col = 9  value = 'P-1411SCC-TTES0717' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '43524' ) ) ) TO rt_sheet.
 
     " Row 7: Invalid KODE PROJECT (> 18 chars)
     APPEND VALUE lcl_types=>ty_sheet_row(
       row_num = 7
       cells   = VALUE #(
-        ( col = 1 value = '1000109372019' )
-        ( col = 2 value = 'BEBAN' )
-        ( col = 6 value = '51376037' )
-        ( col = 7 value = '51376037' )
-        ( col = 9 value = 'PROJECT-CODE-TOO-LONG-123' ) ) ) TO rt_sheet.
+        ( col = 1  value = '1000109372019' )
+        ( col = 2  value = 'BEBAN' )
+        ( col = 3  value = '1' )
+        ( col = 6  value = '51376037' )
+        ( col = 7  value = '51376037' )
+        ( col = 9  value = 'PROJECT-CODE-TOO-LONG-123' )
+        ( col = 10 value = 'SA' )
+        ( col = 20 value = '43524' ) ) ) TO rt_sheet.
   ENDMETHOD.
 
   METHOD test_valid_and_invalid_rows.
@@ -2030,7 +2278,49 @@ CLASS ltcl_excel_parser_test IMPLEMENTATION.
     READ TABLE lt_rows INTO DATA(ls_first) INDEX 1.
     cl_abap_unit_assert=>assert_equals( exp = '0100004137' act = ls_first-doc ).
     cl_abap_unit_assert=>assert_equals( exp = '2019'       act = ls_first-year ).
+    cl_abap_unit_assert=>assert_equals( exp = '001'        act = ls_first-item ).
     cl_abap_unit_assert=>assert_equals( exp = 'BEBAN'      act = ls_first-source ).
+    cl_abap_unit_assert=>assert_equals( exp = 'SA'         act = ls_first-blart ).
+    cl_abap_unit_assert=>assert_equals( exp = '20190131'   act = ls_first-budat ).
+  ENDMETHOD.
+
+  METHOD test_separate_doc_and_year_col.
+    " FBL3N export with separate Document Number, Buzei, Posting Date (year derived or explicit)
+    DATA lt_sheet TYPE lcl_types=>tt_sheet_rows.
+    APPEND VALUE lcl_types=>ty_sheet_row(
+      row_num = 1
+      cells   = VALUE #(
+        ( col = 1 value = 'Document Number' )
+        ( col = 2 value = 'Buzei' )
+        ( col = 3 value = 'Document Type' )
+        ( col = 4 value = 'Posting Date' )
+        ( col = 5 value = 'G/L Account' )
+        ( col = 6 value = 'KODE PROJECT' ) ) ) TO lt_sheet.
+
+    APPEND VALUE lcl_types=>ty_sheet_row(
+      row_num = 2
+      cells   = VALUE #(
+        ( col = 1 value = '100004137' )
+        ( col = 2 value = '1' )
+        ( col = 3 value = 'SA' )
+        ( col = 4 value = '20190131' )
+        ( col = 5 value = '51376037' )
+        ( col = 6 value = 'P-1409SCC-TTES0601' ) ) ) TO lt_sheet.
+
+    lcl_excel_parser=>extract_rows(
+      EXPORTING
+        it_sheet_rows = lt_sheet
+      IMPORTING
+        et_rows       = DATA(lt_rows)
+        et_errors     = DATA(lt_errors) ).
+
+    cl_abap_unit_assert=>assert_equals( exp = 0 act = lines( lt_errors ) ).
+    cl_abap_unit_assert=>assert_equals( exp = 1 act = lines( lt_rows ) ).
+    cl_abap_unit_assert=>assert_equals( exp = '0100004137' act = lt_rows[ 1 ]-doc ).
+    cl_abap_unit_assert=>assert_equals( exp = '2019'       act = lt_rows[ 1 ]-year ).
+    cl_abap_unit_assert=>assert_equals( exp = '001'        act = lt_rows[ 1 ]-item ).
+    cl_abap_unit_assert=>assert_equals( exp = 'SA'         act = lt_rows[ 1 ]-blart ).
+    cl_abap_unit_assert=>assert_equals( exp = '20190131'   act = lt_rows[ 1 ]-budat ).
   ENDMETHOD.
 
   METHOD test_limit_documents.
@@ -2066,7 +2356,7 @@ CLASS ltcl_excel_parser_test IMPLEMENTATION.
 ENDCLASS.
 
 *----------------------------------------------------------------------*
-* Unit Test 3: Orchestrator, Line Resolution, Execution & CSV Export
+* Unit Test 3: Orchestrator, Line Resolution, Validation & CSV Export
 *----------------------------------------------------------------------*
 CLASS ltd_mock_db DEFINITION FINAL FOR TESTING.
   PUBLIC SECTION.
@@ -2113,28 +2403,29 @@ CLASS ltcl_orchestrator_test DEFINITION FINAL FOR TESTING
 
   PRIVATE SECTION.
     METHODS test_all_resolution_statuses FOR TESTING.
+    METHODS test_validation_mismatches   FOR TESTING.
     METHODS test_dry_run_vs_live_exec    FOR TESTING.
     METHODS test_error_and_csv_export    FOR TESTING.
 ENDCLASS.
 
 CLASS ltcl_orchestrator_test IMPLEMENTATION.
   METHOD test_all_resolution_statuses.
-    " Doc 1 (0100004137/2019): 001 needs change, 002 already set
-    " Doc 2 (0100010920/2019): ambiguous (two lines with same G/L) and no_match
+    " Doc 1 (0100004137/2019): 001 needs change, 002 already set, 003 not in ACDOCA -> ITEM_NOT_FOUND
+    " Doc 2 (0100010920/2019): 001 & 002 have identical G/L account (resolved unambiguously by BUZEI!)
     " Doc 3 (0100099999/2019): not in ACDOCA -> DOC_NOT_FOUND
     DATA(lo_db) = NEW ltd_mock_db( ).
     lo_db->mt_items = VALUE #(
-      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' assignment = 'BPR NTB Sumbawa' )
-      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' assignment = 'P-1409SCC-TTES0601' )
-      ( doc = '0100010920' year = '2019' item = '001' racct = '0051376037' assignment = 'OLD1' )
-      ( doc = '0100010920' year = '2019' item = '002' racct = '0051376037' assignment = 'OLD2' ) ).
+      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'BPR NTB Sumbawa' )
+      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' blart = 'SA' budat = '20190131' assignment = 'P-1409SCC-TTES0601' )
+      ( doc = '0100010920' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190228' assignment = 'OLD1' )
+      ( doc = '0100010920' year = '2019' item = '002' racct = '0051376037' blart = 'SA' budat = '20190228' assignment = 'OLD2' ) ).
 
     DATA(lt_rows) = VALUE lcl_types=>tt_excel_rows(
-      ( xl_row = 2 doc = '0100004137' year = '2019' source = 'BEBAN'  gl = '51376037' target = 'P-1409SCC-TTES0601' )
-      ( xl_row = 3 doc = '0100004137' year = '2019' source = 'VENDOR' gl = '20101002' target = 'P-1409SCC-TTES0601' )
-      ( xl_row = 4 doc = '0100010920' year = '2019' source = 'BEBAN'  gl = '51376037' target = 'P-1411SCC-TTES0717' )
-      ( xl_row = 5 doc = '0100010920' year = '2019' source = 'VENDOR' gl = '99999999' target = 'P-1411SCC-TTES0717' )
-      ( xl_row = 6 doc = '0100099999' year = '2019' source = 'BEBAN'  gl = '51376037' target = 'P-1411SCC-TTES0717' ) ).
+      ( xl_row = 2 doc = '0100004137' year = '2019' item = '001' source = 'BEBAN'  gl = '51376037' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' )
+      ( xl_row = 3 doc = '0100004137' year = '2019' item = '002' source = 'VENDOR' gl = '20101002' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' )
+      ( xl_row = 4 doc = '0100004137' year = '2019' item = '003' source = 'BEBAN'  gl = '51376037' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' )
+      ( xl_row = 5 doc = '0100010920' year = '2019' item = '002' source = 'BEBAN'  gl = '51376037' blart = 'SA' budat = '20190228' target = 'P-1411SCC-TTES0717' )
+      ( xl_row = 6 doc = '0100099999' year = '2019' item = '001' source = 'BEBAN'  gl = '51376037' blart = 'SA' budat = '20190131' target = 'P-1411SCC-TTES0717' ) ).
 
     DATA(lt_keys) = VALUE lcl_types=>tt_doc_keys(
       ( doc = '0100004137' year = '2019' )
@@ -2154,23 +2445,61 @@ CLASS ltcl_orchestrator_test IMPLEMENTATION.
     cl_abap_unit_assert=>assert_equals( exp = 5 act = lines( lt_plan ) ).
     cl_abap_unit_assert=>assert_equals( exp = 'PLANNED'             act = lt_plan[ 1 ]-status ).
     cl_abap_unit_assert=>assert_equals( exp = 'SKIPPED_ALREADY_SET' act = lt_plan[ 2 ]-status ).
-    cl_abap_unit_assert=>assert_equals( exp = 'AMBIGUOUS'           act = lt_plan[ 3 ]-status ).
-    cl_abap_unit_assert=>assert_equals( exp = 'NO_MATCH'            act = lt_plan[ 4 ]-status ).
+    cl_abap_unit_assert=>assert_equals( exp = 'ITEM_NOT_FOUND'      act = lt_plan[ 3 ]-status ).
+    cl_abap_unit_assert=>assert_equals( exp = 'PLANNED'             act = lt_plan[ 4 ]-status ).
+    cl_abap_unit_assert=>assert_equals( exp = 'OLD2'                act = lt_plan[ 4 ]-old ).
     cl_abap_unit_assert=>assert_equals( exp = 'DOC_NOT_FOUND'       act = lt_plan[ 5 ]-status ).
+  ENDMETHOD.
+
+  METHOD test_validation_mismatches.
+    " Verify that mismatch in Document Type, Posting Date, or G/L Account fails/skips the row
+    DATA(lo_db) = NEW ltd_mock_db( ).
+    lo_db->mt_items = VALUE #(
+      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'OLD_VAL' )
+      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' blart = 'SA' budat = '20190131' assignment = 'OLD_VAL' )
+      ( doc = '0100004137' year = '2019' item = '003' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'OLD_VAL' ) ).
+
+    DATA(lt_rows) = VALUE lcl_types=>tt_excel_rows(
+      " Row 1: Document Type mismatch (KR vs SA)
+      ( xl_row = 2 doc = '0100004137' year = '2019' item = '001' source = 'BEBAN'  gl = '51376037' blart = 'KR' budat = '20190131' target = 'NEW_VAL' )
+      " Row 2: Posting Date mismatch (20190228 vs 20190131)
+      ( xl_row = 3 doc = '0100004137' year = '2019' item = '002' source = 'VENDOR' gl = '20101002' blart = 'SA' budat = '20190228' target = 'NEW_VAL' )
+      " Row 3: G/L Account mismatch (99999999 vs 51376037)
+      ( xl_row = 4 doc = '0100004137' year = '2019' item = '003' source = 'BEBAN'  gl = '99999999' blart = 'SA' budat = '20190131' target = 'NEW_VAL' ) ).
+
+    DATA(lt_keys) = VALUE lcl_types=>tt_doc_keys( ( doc = '0100004137' year = '2019' ) ).
+
+    DATA(lo_changer) = NEW ltd_mock_changer( ).
+    DATA(lo_orch)    = NEW lcl_orchestrator( io_db = lo_db io_changer = lo_changer ).
+
+    DATA(lt_plan) = lo_orch->run(
+      iv_bukrs      = '1000'
+      iv_mode       = lcl_types=>c_mode-execute
+      it_excel_rows = lt_rows
+      it_doc_keys   = lt_keys ).
+
+    " Because all 3 rows failed validation, no document change call should be made
+    cl_abap_unit_assert=>assert_equals( exp = 0 act = lo_changer->mv_calls ).
+    cl_abap_unit_assert=>assert_equals( exp = 'VALIDATION_FAILED' act = lt_plan[ 1 ]-status ).
+    cl_abap_unit_assert=>assert_char_cp( act = lt_plan[ 1 ]-message exp = '*Document Type mismatch*' ).
+    cl_abap_unit_assert=>assert_equals( exp = 'VALIDATION_FAILED' act = lt_plan[ 2 ]-status ).
+    cl_abap_unit_assert=>assert_char_cp( act = lt_plan[ 2 ]-message exp = '*Posting Date mismatch*' ).
+    cl_abap_unit_assert=>assert_equals( exp = 'VALIDATION_FAILED' act = lt_plan[ 3 ]-status ).
+    cl_abap_unit_assert=>assert_char_cp( act = lt_plan[ 3 ]-message exp = '*G/L Account mismatch*' ).
   ENDMETHOD.
 
   METHOD test_dry_run_vs_live_exec.
     DATA(lo_db) = NEW ltd_mock_db( ).
     lo_db->mt_items = VALUE #(
-      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' assignment = 'BPR NTB Sumbawa' )
-      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' assignment = 'BPR NTB Sumbawa' ) ).
+      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'BPR NTB Sumbawa' )
+      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' blart = 'SA' budat = '20190131' assignment = 'BPR NTB Sumbawa' ) ).
     lo_db->mt_post_items = VALUE #(
-      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' assignment = 'P-1409SCC-TTES0601' )
-      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' assignment = 'P-1409SCC-TTES0601' ) ).
+      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'P-1409SCC-TTES0601' )
+      ( doc = '0100004137' year = '2019' item = '002' racct = '0020101002' blart = 'SA' budat = '20190131' assignment = 'P-1409SCC-TTES0601' ) ).
 
     DATA(lt_rows) = VALUE lcl_types=>tt_excel_rows(
-      ( xl_row = 2 doc = '0100004137' year = '2019' source = 'BEBAN'  gl = '51376037' target = 'P-1409SCC-TTES0601' )
-      ( xl_row = 3 doc = '0100004137' year = '2019' source = 'VENDOR' gl = '20101002' target = 'P-1409SCC-TTES0601' ) ).
+      ( xl_row = 2 doc = '0100004137' year = '2019' item = '001' source = 'BEBAN'  gl = '51376037' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' )
+      ( xl_row = 3 doc = '0100004137' year = '2019' item = '002' source = 'VENDOR' gl = '20101002' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' ) ).
     DATA(lt_keys) = VALUE lcl_types=>tt_doc_keys( ( doc = '0100004137' year = '2019' ) ).
 
     DATA(lo_changer) = NEW ltd_mock_changer( ).
@@ -2190,10 +2519,10 @@ CLASS ltcl_orchestrator_test IMPLEMENTATION.
   METHOD test_error_and_csv_export.
     DATA(lo_db) = NEW ltd_mock_db( ).
     lo_db->mt_items = VALUE #(
-      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' assignment = 'BPR NTB Sumbawa' ) ).
+      ( doc = '0100004137' year = '2019' item = '001' racct = '0051376037' blart = 'SA' budat = '20190131' assignment = 'BPR NTB Sumbawa' ) ).
 
     DATA(lt_rows) = VALUE lcl_types=>tt_excel_rows(
-      ( xl_row = 2 doc = '0100004137' year = '2019' source = 'BEBAN' gl = '51376037' target = 'P-1409SCC-TTES0601' ) ).
+      ( xl_row = 2 doc = '0100004137' year = '2019' item = '001' source = 'BEBAN' gl = '51376037' blart = 'SA' budat = '20190131' target = 'P-1409SCC-TTES0601' ) ).
     DATA(lt_keys) = VALUE lcl_types=>tt_doc_keys( ( doc = '0100004137' year = '2019' ) ).
 
     DATA(lo_changer) = NEW ltd_mock_changer( ).

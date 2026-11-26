@@ -179,46 +179,196 @@ def abap_parse_xlsx(xlsx_bytes: bytes) -> list[dict]:
         return abap_parse_worksheet(zf.read(sheet_path), ss)
 
 
+def normalize_buzei(val: str) -> str:
+    """Exact port of lcl_types=>normalize_buzei."""
+    s = val.strip()
+    if not s:
+        return ""
+    if "." in s:
+        dot_pos = s.index(".")
+        if dot_pos > 0:
+            s = s[:dot_pos]
+    s = s.lstrip("0")
+    if not s or not s.isdigit() or len(s) > 3:
+        return ""
+    return s.zfill(3)
+
+
+def parse_excel_date(raw: str) -> str:
+    """Exact port of lcl_types=>parse_excel_date."""
+    import datetime
+
+    s = raw.strip()
+    if not s:
+        return ""
+    num_part = s
+    if "." in num_part:
+        dot_off = num_part.index(".")
+        if dot_off > 0:
+            frac = num_part[dot_off + 1 :]
+            if frac and all(c == "0" for c in frac):
+                num_part = num_part[:dot_off]
+    if num_part.isdigit() and 4 <= len(num_part) <= 6:
+        serial = int(num_part)
+        if 1 <= serial <= 2958465:
+            dt = datetime.date(1899, 12, 30) + datetime.timedelta(days=serial)
+            return dt.strftime("%Y%m%d")
+    if len(s) == 8 and s.isdigit():
+        return s
+    parts = []
+    if "-" in s:
+        parts = s.split("-")
+    elif "." in s:
+        parts = s.split(".")
+    elif "/" in s:
+        parts = s.split("/")
+    if len(parts) == 3:
+        p1 = parts[0].strip()
+        p2 = parts[1].strip()
+        p3 = parts[2].strip().split(" ")[0]
+        if p1.isdigit() and p2.isdigit() and p3.isdigit():
+            if len(p1) == 4:
+                p2 = p2.zfill(2)
+                p3 = p3.zfill(2)
+                if len(p2) == 2 and len(p3) == 2:
+                    return f"{p1}{p2}{p3}"
+            elif len(p3) == 4:
+                p1 = p1.zfill(2)
+                p2 = p2.zfill(2)
+                if len(p1) == 2 and len(p2) == 2:
+                    return f"{p3}{p2}{p1}"
+    return ""
+
+
 def abap_extract_rows(sheet_rows: list[dict], limit_docs: int = 0):
     """Exact port of lcl_excel_parser=>extract_rows."""
     header = sheet_rows[0]["cells"]
-    col_map = {v.strip().upper(): k for k, v in header.items()}
-    need = ["DOC NUMBER + YEAR", "SOURCE DATA", "G/L ACCOUNT", "ACCOUNT", "KODE PROJECT"]
-    missing = [n for n in need if n not in col_map]
+    col_doc_year = 0
+    col_doc_no = 0
+    col_year = 0
+    col_buzei = 0
+    col_source = 0
+    col_gl = 0
+    col_blart = 0
+    col_budat = 0
+    col_account = 0
+    col_target = 0
+
+    for col, val in sorted(header.items()):
+        hname = " ".join(val.strip().upper().split())
+        if hname == "DOC NUMBER + YEAR" and col_doc_year == 0:
+            col_doc_year = col
+        elif hname in ("DOCUMENT NUMBER", "DOC NUMBER", "DOC. NO.", "DOCUMENT NO", "BELNR") and col_doc_no == 0:
+            col_doc_no = col
+        elif hname in ("FISCAL YEAR", "YEAR", "GJAHR") and col_year == 0:
+            col_year = col
+        elif hname in ("BUZEI", "LINE ITEM", "ITEM", "ITM", "LINE ITEM NO", "DOC. ITEM") and col_buzei == 0:
+            col_buzei = col
+        elif hname == "SOURCE DATA" and col_source == 0:
+            col_source = col
+        elif hname in ("G/L ACCOUNT", "G/L", "GL ACCOUNT", "HKONT", "RACCT") and col_gl == 0:
+            col_gl = col
+        elif hname in ("DOCUMENT TYPE", "DOC. TYPE", "DOC TYPE", "TYPE", "BLART") and col_blart == 0:
+            col_blart = col
+        elif hname in ("POSTING DATE", "POST. DATE", "PSTNG DATE", "BUDAT") and col_budat == 0:
+            col_budat = col
+        elif hname == "ACCOUNT" and col_account == 0:
+            col_account = col
+        elif hname == "KODE PROJECT" and col_target == 0:
+            col_target = col
+
+    missing = []
+    if col_doc_year == 0 and col_doc_no == 0:
+        missing.append("'Doc Number + Year' (or 'Document Number')")
+    if col_buzei == 0:
+        missing.append("'Buzei' / 'Line Item'")
+    if col_blart == 0:
+        missing.append("'Document Type'")
+    if col_budat == 0:
+        missing.append("'Posting Date'")
+    if col_gl == 0:
+        missing.append("'G/L Account'")
+    if col_target == 0:
+        missing.append("'KODE PROJECT'")
     if missing:
-        raise ValueError(f"Excel is missing required columns: {missing}")
+        raise ValueError(f"Excel is missing required columns: [{', '.join(missing)}]")
 
     all_rows, errors = [], []
     for srow in sheet_rows[1:]:
         cells = srow["cells"]
-        key = cells.get(col_map["DOC NUMBER + YEAR"], "").strip()
-        if not key:
+        key = cells.get(col_doc_year, "").strip() if col_doc_year else ""
+        doc_cell = cells.get(col_doc_no, "").strip() if col_doc_no else ""
+        yr_cell = cells.get(col_year, "").strip() if col_year else ""
+        if not key and not doc_cell:
             continue
-        if len(key) < 5:
-            errors.append((srow["row_num"], f"bad 'Doc Number + Year': '{key}'"))
+
+        budat_raw = cells.get(col_budat, "").strip()
+        budat = parse_excel_date(budat_raw)
+
+        doc_raw, year_raw = "", ""
+        if key:
+            if len(key) < 5:
+                errors.append((srow["row_num"], f"bad 'Doc Number + Year': '{key}'"))
+                continue
+            doc_raw, year_raw = key[:-4], key[-4:]
+        else:
+            doc_raw = doc_cell
+            if yr_cell:
+                year_raw = yr_cell
+            elif budat:
+                year_raw = budat[:4]
+
+        if not doc_raw or len(doc_raw) > 10 or len(year_raw) != 4 or not year_raw.isdigit():
+            err_key = key if key else f"{doc_cell}/{yr_cell}"
+            errors.append((srow["row_num"], f"bad Document Number / Year: '{err_key}'"))
             continue
-        doc_raw, year_raw = key[:-4], key[-4:]
-        if not year_raw.isdigit() or len(doc_raw) > 10:
-            errors.append((srow["row_num"], f"bad 'Doc Number + Year': '{key}'"))
+
+        buzei_raw = cells.get(col_buzei, "").strip()
+        buzei = normalize_buzei(buzei_raw)
+        if not buzei:
+            errors.append((srow["row_num"], f"bad or empty Buzei / Line Item: '{buzei_raw}'"))
             continue
-        source = cells.get(col_map["SOURCE DATA"], "").strip().upper()
-        if source not in ("BEBAN", "VENDOR"):
-            errors.append((srow["row_num"], f"unknown Source Data '{source}'"))
+
+        source = cells.get(col_source, "").strip().upper() if col_source else ""
+        if col_source and source:
+            if source not in ("BEBAN", "VENDOR"):
+                errors.append((srow["row_num"], f"unknown Source Data '{source}'"))
+                continue
+        elif not source:
+            source = "BEBAN"
+
+        blart_raw = cells.get(col_blart, "").strip().upper()
+        if not blart_raw:
+            errors.append((srow["row_num"], "Document Type is empty"))
             continue
-        target = cells.get(col_map["KODE PROJECT"], "").strip()
+
+        if not budat:
+            errors.append((srow["row_num"], f"bad or empty Posting Date: '{budat_raw}'"))
+            continue
+
+        gl_raw = cells.get(col_gl, "").strip()
+        if not gl_raw:
+            errors.append((srow["row_num"], "G/L Account is empty"))
+            continue
+
+        target = cells.get(col_target, "").strip()
         if not target:
             errors.append((srow["row_num"], "KODE PROJECT is empty"))
             continue
         if len(target) > 18:
             errors.append((srow["row_num"], f"KODE PROJECT longer than 18: '{target}'"))
             continue
+
         all_rows.append({
             "xl_row": srow["row_num"],
             "doc": doc_raw.zfill(10),
             "year": year_raw,
+            "item": buzei,
             "source": source,
-            "gl": cells.get(col_map["G/L ACCOUNT"], "").strip(),
-            "account": cells.get(col_map["ACCOUNT"], "").strip(),
+            "gl": gl_raw,
+            "blart": blart_raw,
+            "budat": budat,
+            "account": cells.get(col_account, "").strip() if col_account else "",
             "target": target,
         })
 
@@ -234,18 +384,50 @@ def abap_extract_rows(sheet_rows: list[dict], limit_docs: int = 0):
     return rows, errors, doc_keys
 
 
+def abap_resolve_line(row: dict, doc_items: list[dict]):
+    """Exact port of lcl_orchestrator=>resolve_line."""
+    if not doc_items:
+        return None, "DOC_NOT_FOUND", "Document not found in ACDOCA"
+
+    hits = [i for i in doc_items if i["item"] == row["item"]]
+    if not hits:
+        return (
+            None,
+            "ITEM_NOT_FOUND",
+            f"Line item (BUZEI) {row['item']} not found in document {row['doc']}/{row['year']}",
+        )
+
+    item = hits[0]
+    mismatches = []
+    exp_blart = row["blart"].strip().upper()
+    act_blart = item["blart"].strip().upper()
+    if exp_blart != act_blart:
+        mismatches.append(f"Document Type mismatch (Excel='{exp_blart}', SAP='{act_blart}')")
+
+    if row["budat"] != item["budat"]:
+        mismatches.append(f"Posting Date mismatch (Excel='{row['budat']}', SAP='{item['budat']}')")
+
+    exp_gl = row["gl"].strip().lstrip("0")
+    act_gl = item["racct"].strip().lstrip("0")
+    if exp_gl != act_gl:
+        mismatches.append(f"G/L Account mismatch (Excel='{row['gl']}', SAP='{act_gl}')")
+
+    if mismatches:
+        return item, "VALIDATION_FAILED", "; ".join(mismatches)
+
+    if item["assignment"] == row["target"]:
+        return item, "SKIPPED_ALREADY_SET", "Assignment already equals target value"
+
+    return item, "PLANNED", ""
+
+
 class TestAbapZProgramLogic(unittest.TestCase):
-    def test_real_excel_and_plan_parity(self):
-        """Verify 100% parity on all 48 lines / 24 documents against real Excel & plan CSV."""
+    def test_real_excel_with_fbl3n_buzei_and_plan_parity(self):
+        """Verify 100% parity on all 48 lines / 24 documents when Buzei column is added to the real Excel."""
         with open(EXCEL_PATH, "rb") as f:
             xlsx_bytes = f.read()
 
         sheet_rows = abap_parse_xlsx(xlsx_bytes)
-        rows, errors, doc_keys = abap_extract_rows(sheet_rows)
-
-        self.assertEqual(len(errors), 0)
-        self.assertEqual(len(doc_keys), 24)
-        self.assertEqual(len(rows), 48)
 
         # Load ACDOCA lines from acdoca_lines_20261118_220450.csv
         acdoca_by_doc = {}
@@ -255,27 +437,47 @@ class TestAbapZProgramLogic(unittest.TestCase):
                 acdoca_by_doc.setdefault(key, []).append({
                     "item": r["docln"][-3:],
                     "racct": r["racct"],
+                    "blart": r["blart"],
+                    "budat": r["budat"],
                     "assignment": r["zuonr"],
                 })
+
+        # Add FBL3N 'Buzei' column (col 28) to the parsed sheet rows
+        sheet_rows[0]["cells"][28] = "Buzei"
+        for srow in sheet_rows[1:]:
+            c = srow["cells"]
+            key = c.get(1, "").strip()
+            if not key:
+                continue
+            doc_no0, yr = key[:-4].lstrip("0"), key[-4:]
+            gl_no0 = c.get(6, "").strip().lstrip("0")
+            for item in acdoca_by_doc.get((doc_no0, yr), []):
+                if item["racct"].lstrip("0") == gl_no0:
+                    c[28] = str(int(item["item"]))  # e.g. '1' or '2' as exported by FBL3N
+                    break
+
+        rows, errors, doc_keys = abap_extract_rows(sheet_rows)
+
+        self.assertEqual(len(errors), 0)
+        self.assertEqual(len(doc_keys), 24)
+        self.assertEqual(len(rows), 48)
 
         # Simulate lcl_orchestrator=>run in Dry-Run mode
         abap_plan = []
         for doc, year in doc_keys:
             items = acdoca_by_doc.get((doc.lstrip("0"), year), [])
             for r in [x for x in rows if x["doc"] == doc and x["year"] == year]:
-                hits = [i for i in items if i["racct"].lstrip("0") == r["gl"].lstrip("0")]
-                self.assertEqual(len(hits), 1)
-                it = hits[0]
-                status = "SKIPPED_ALREADY_SET" if it["assignment"] == r["target"] else "PLANNED"
+                it, status, msg = abap_resolve_line(r, items)
+                self.assertIn(status, ("PLANNED", "SKIPPED_ALREADY_SET"))
                 abap_plan.append({
                     "doc": doc,
                     "year": year,
-                    "item": it["item"],
+                    "item": r["item"],
                     "source": r["source"],
                     "old": it["assignment"],
                     "target": r["target"],
                     "status": status,
-                    "message": "",
+                    "message": "" if status in ("PLANNED", "SKIPPED_ALREADY_SET") else msg,
                 })
 
         with open(EXPECTED_PLAN_CSV, encoding="utf-8") as f:
@@ -283,8 +485,44 @@ class TestAbapZProgramLogic(unittest.TestCase):
 
         self.assertEqual(abap_plan, expected_plan)
 
+    def test_validation_fields_mismatch_fails_row(self):
+        """Verify that mismatch on Document Type, Posting Date, or G/L Account fails the row."""
+        doc_items = [
+            {
+                "item": "001",
+                "racct": "0051376037",
+                "blart": "SA",
+                "budat": "20190131",
+                "assignment": "OLD_ASSIGN",
+            }
+        ]
+
+        # 1. Document Type mismatch
+        _, st1, msg1 = abap_resolve_line(
+            {"doc": "0100004137", "year": "2019", "item": "001", "blart": "KR", "budat": "20190131", "gl": "51376037", "target": "NEW"},
+            doc_items,
+        )
+        self.assertEqual(st1, "VALIDATION_FAILED")
+        self.assertIn("Document Type mismatch", msg1)
+
+        # 2. Posting Date mismatch
+        _, st2, msg2 = abap_resolve_line(
+            {"doc": "0100004137", "year": "2019", "item": "001", "blart": "SA", "budat": "20190228", "gl": "51376037", "target": "NEW"},
+            doc_items,
+        )
+        self.assertEqual(st2, "VALIDATION_FAILED")
+        self.assertIn("Posting Date mismatch", msg2)
+
+        # 3. G/L Account mismatch
+        _, st3, msg3 = abap_resolve_line(
+            {"doc": "0100004137", "year": "2019", "item": "001", "blart": "SA", "budat": "20190131", "gl": "20101002", "target": "NEW"},
+            doc_items,
+        )
+        self.assertEqual(st3, "VALIDATION_FAILED")
+        self.assertIn("G/L Account mismatch", msg3)
+
     def test_macos_and_windows_xlsx_variations(self):
-        """Verify rich text, phonetic guides, inlineStr, formula str, and /xl/... paths."""
+        """Verify rich text, phonetic guides, inlineStr, formula str, and /xl/... paths with Buzei & validation columns."""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("xl/workbook.xml", (
@@ -313,16 +551,22 @@ class TestAbapZProgramLogic(unittest.TestCase):
                 '<row r="1">'
                 '<c r="A1" t="s"><v>0</v></c>'
                 '<c r="B1" t="inlineStr"><is><t>Source Data</t></is></c>'
+                '<c r="C1" t="inlineStr"><is><t>Line Item</t></is></c>'
                 '<c r="F1" t="str"><v>G/L Account</v></c>'
                 '<c r="G1" t="inlineStr"><is><t>Account</t></is></c>'
                 '<c r="I1" t="inlineStr"><is><t>KODE PROJECT</t></is></c>'
+                '<c r="J1" t="inlineStr"><is><t>Document Type</t></is></c>'
+                '<c r="T1" t="inlineStr"><is><t>Posting Date</t></is></c>'
                 '</row>'
                 '<row r="2">'
                 '<c r="A2" t="inlineStr"><is><t>1000041372019</t></is></c>'
                 '<c r="B2" t="inlineStr"><is><t>BEBAN</t></is></c>'
+                '<c r="C2"><v>1</v></c>'
                 '<c r="F2"><v>51376037</v></c>'
                 '<c r="G2"><v>51376037</v></c>'
                 '<c r="I2" t="s"><v>1</v></c>'
+                '<c r="J2" t="inlineStr"><is><t>SA</t></is></c>'
+                '<c r="T2"><v>43496</v></c>'
                 '</row>'
                 '</sheetData></worksheet>'
             ))
@@ -333,6 +577,9 @@ class TestAbapZProgramLogic(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["doc"], "0100004137")
         self.assertEqual(rows[0]["year"], "2019")
+        self.assertEqual(rows[0]["item"], "001")
+        self.assertEqual(rows[0]["blart"], "SA")
+        self.assertEqual(rows[0]["budat"], "20190131")
         self.assertEqual(rows[0]["target"], "P-1409SCC-TTES0601")
 
 
