@@ -1,0 +1,49 @@
+--- a/zfi_bulk_change_assign.abap
++++ b/zfi_bulk_change_assign.abap
+@@ -1078,6 +1078,46 @@
+       RETURN.
+     ENDIF.
+ 
++    " Read the entry-view items actually addressed by FI_DOCUMENT_CHANGE.
++    " Preflight the entire change set while locked, before changing any line.
++    SELECT buzei, gsber FROM bseg
++      WHERE bukrs = @iv_bukrs AND belnr = @iv_doc AND gjahr = @iv_year
++      INTO TABLE @DATA(lt_doc_areas).
++    SORT lt_doc_areas BY buzei.
++    DATA lt_checked_areas TYPE HASHED TABLE OF gsber WITH UNIQUE KEY table_line.
++    LOOP AT it_changes INTO DATA(ls_target).
++      READ TABLE lt_doc_areas INTO DATA(ls_area)
++        WITH KEY buzei = ls_target-item BINARY SEARCH.
++      IF sy-subrc <> 0.
++        ev_message = |No BSEG item { ls_target-item }; business area cannot be verified|.
++        EXIT.
++      ENDIF.
++      IF ls_area-gsber IS INITIAL.
++        ev_message = |Blank business area on item { ls_target-item }; change not permitted|.
++        EXIT.
++      ENDIF.
++      IF line_exists( lt_checked_areas[ table_line = ls_area-gsber ] ).
++        CONTINUE.
++      ENDIF.
++      AUTHORITY-CHECK OBJECT 'F_BKPF_GSB'
++        ID 'GSBER' FIELD ls_area-gsber
++        ID 'ACTVT' FIELD '02'.
++      IF sy-subrc <> 0.
++        ev_message = |No authorization (F_BKPF_GSB ACTVT 02) for business area { ls_area-gsber }|.
++        EXIT.
++      ENDIF.
++      INSERT ls_area-gsber INTO TABLE lt_checked_areas.
++    ENDLOOP.
++    IF ev_message IS NOT INITIAL.
++      ev_ok = abap_false.
++      CALL FUNCTION 'DEQUEUE_EFBKPF'
++        EXPORTING
++          belnr = iv_doc
++          bukrs = iv_bukrs
++          gjahr = iv_year.
++      RETURN.
++    ENDIF.
++
+     IF iv_testrun = abap_true.
+       CALL FUNCTION 'DEQUEUE_EFBKPF'
+         EXPORTING
