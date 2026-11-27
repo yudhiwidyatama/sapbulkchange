@@ -70,7 +70,7 @@ public sealed class ExcelReaderService
 
     internal static DateOnly? ParseDate(string value)
     {
-        var raw = value.Split(' ', 'T')[0];
+        var raw = value.Split(new[] { ' ', 'T' }, 2)[0];
         string[] formats = ["yyyyMMdd", "yyyy-M-d", "yyyy/M/d", "yyyy.M.d", "d.M.yyyy", "d/M/yyyy", "d-M-yyyy"];
         if (DateOnly.TryParseExact(raw, formats, Inv, DateTimeStyles.None, out var date)) return date;
         var serial = Regex.Replace(raw, @"\.0+$", "");

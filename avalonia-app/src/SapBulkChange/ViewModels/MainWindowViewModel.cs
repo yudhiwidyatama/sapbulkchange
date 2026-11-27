@@ -175,6 +175,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         try
         {
+            _allPlanRows.Clear();
+            _parsedExcelRows.Clear();
+            ApplyFilterAndCounts();
             ExcelFilePath = filePath;
             var result = _excelService.Read(filePath);
             _parsedExcelRows.Clear();
@@ -419,7 +422,7 @@ public partial class MainWindowViewModel : ObservableObject
         ChangedCount = _allPlanRows.Count(r => r.Status == LineStatus.CHANGED);
         SkippedCount = _allPlanRows.Count(r => r.Status == LineStatus.SKIPPED_ALREADY_SET);
         ErrorCount = _allPlanRows.Count(r => r.Status is
-            LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH or LineStatus.AMBIGUOUS or
+            LineStatus.VALIDATION_FAILED or LineStatus.ITEM_NOT_FOUND or LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH or LineStatus.AMBIGUOUS or
             LineStatus.XSD_INVALID or LineStatus.SEND_ERROR or LineStatus.NOT_CHANGED or LineStatus.VERIFY_ERROR);
 
         CanExecute = !IsBusy && PlannedCount > 0;
@@ -433,7 +436,7 @@ public partial class MainWindowViewModel : ObservableObject
             "Changed" => query.Where(r => r.Status == LineStatus.CHANGED),
             "Skipped" => query.Where(r => r.Status == LineStatus.SKIPPED_ALREADY_SET),
             "Errors" => query.Where(r => r.Status is
-                LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH or LineStatus.AMBIGUOUS or
+                LineStatus.VALIDATION_FAILED or LineStatus.ITEM_NOT_FOUND or LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH or LineStatus.AMBIGUOUS or
                 LineStatus.XSD_INVALID or LineStatus.SEND_ERROR or LineStatus.NOT_CHANGED or LineStatus.VERIFY_ERROR),
             _ => query
         };

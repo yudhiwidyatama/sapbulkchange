@@ -32,6 +32,10 @@ public sealed class AssignmentChangeOrchestrator
         _auditService = auditService;
     }
 
+    private (string OData, string Soap, string Company, string Start, string End, int? Limit)? _previewScope;
+    private static (string,string,string,string,string,int?) Scope(ExecutionOptions o) =>
+        (o.ODataBaseUrl, o.SoapEndpointUrl, o.CompanyCode, o.StartDate, o.EndDate, o.LimitDocs);
+
     public async Task<List<ChangePlanRow>> PreviewAsync(
         IReadOnlyList<ExcelInputRow> excelRows,
         ExecutionOptions options,
@@ -40,6 +44,7 @@ public sealed class AssignmentChangeOrchestrator
         CancellationToken ct)
     {
         var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        _previewScope = null;
         progress(5);
 
         var docGroups = GroupByDoc(excelRows, options.LimitDocs);
@@ -68,43 +73,14 @@ public sealed class AssignmentChangeOrchestrator
             items ??= [];
 
             foreach (var r in rows)
-            {
-                if (items.Count == 0)
-                {
-                    plan.Add(new ChangePlanRow
-                    {
-                        Doc = r.Doc,
-                        Year = r.Year,
-                        Item = string.Empty,
-                        Source = r.Source,
-                        GlAccount = r.GlAccount,
-                        OldAssignment = string.Empty,
-                        TargetAssignment = r.TargetAssignment,
-                        Status = LineStatus.DOC_NOT_FOUND
-                    });
-                    continue;
-                }
-
-                var (line, status) = AcdocaODataService.ResolveLine(r, items);
-                plan.Add(new ChangePlanRow
-                {
-                    Doc = r.Doc,
-                    Year = r.Year,
-                    Item = line?.Item ?? string.Empty,
-                    Source = r.Source,
-                    GlAccount = r.GlAccount,
-                    OldAssignment = line?.CurrentAssignment ?? string.Empty,
-                    TargetAssignment = r.TargetAssignment,
-                    Status = status
-                });
-            }
+                plan.Add(AcdocaODataService.PlanLine(r, items));
         }
 
         // Local XSD validation for all PLANNED batches
         var plannedRows = plan.Where(p => p.Status == LineStatus.PLANNED).ToList();
         if (plannedRows.Count > 0)
         {
-            var batches = ChunkByDoc(plannedRows, Math.Max(1, options.BatchDocs));
+            var batches = ChunkByDoc(plannedRows, 1);
             var utcNow = DateTime.UtcNow;
             for (int i = 0; i < batches.Count; i++)
             {
@@ -139,6 +115,7 @@ public sealed class AssignmentChangeOrchestrator
         }
 
         progress(100);
+        _previewScope = Scope(options);
         return plan;
     }
 
@@ -149,6 +126,7 @@ public sealed class AssignmentChangeOrchestrator
         Action<double> progress,
         CancellationToken ct)
     {
+        if (_previewScope != Scope(options)) throw new InvalidOperationException("Target or scope changed; preview the file again before execution.");
         var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var plannedRows = plan.Where(p => p.Status == LineStatus.PLANNED).ToList();
         if (plannedRows.Count == 0)
@@ -157,7 +135,7 @@ public sealed class AssignmentChangeOrchestrator
             return;
         }
 
-        var batches = ChunkByDoc(plannedRows, Math.Max(1, options.BatchDocs));
+        var batches = ChunkByDoc(plannedRows, 1);
         var utcNow = DateTime.UtcNow;
 
         for (int i = 0; i < batches.Count; i++)

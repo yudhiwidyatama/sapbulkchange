@@ -122,38 +122,11 @@ avalonia-app/
 
 ## 5. Exact Business Logic & SAP Integration Contracts
 
-### 5.1 Excel Input Validation (`ExcelReaderService`)
-- Reads worksheet 1, row 1 as trimmed headers.
-- Required columns (exact names):
-  - `Doc Number + Year`
-  - `Source Data`
-  - `G/L Account`
-  - `Account`
-  - `KODE PROJECT`
-- Per-row rules (skip completely blank `Doc Number + Year` rows):
-  - `Doc Number + Year`: length `>= 5`; `Doc = key[..^4].PadLeft(10, '0')`; `Year = key[^4..]`.
-  - `Source Data`: trimmed, uppercased; must be `BEBAN` (maps to G/L type `S`) or `VENDOR` (maps to D/C type `K`).
-  - `KODE PROJECT`: trimmed, non-empty, length `<= 18` (`ZUONR` max length).
-- Invalid Excel rows are recorded as warnings (displayed in log & summary) and excluded from the SAP plan rather than crashing the load.
+### 5.1 Excel input (implemented contract)
+Read the first worksheet, accepting combined Doc Number + Year or separate BELNR and fiscal year (fallback: posting-date year). Required: line item (BUZEI), document type, posting date, G/L account, and KODE PROJECT (1–18 characters). Headers accept the FBL3N aliases in ExcelReaderService. Source Data defaults to BEBAN; VENDOR explicitly selects a vendor item. Account is optional. Invalid rows are reported with worksheet row number and excluded.
 
-### 5.2 ACDOCA OData Lookup (`AcdocaODataService`)
-- **Endpoint**:
-  ```text
-  {ODataBaseUrl}(p_sdate='{sdate}',p_edate='{edate}')/Set?$filter={Uri.EscapeDataString(filter)}
-  ```
-  Default QAS base: `https://10.60.177.131:44350/sap/opu/odata/sap/ZFDR_ACDOCA_V2_CDS/ZFDR_ACDOCA_V2`
-- **Filter** (chunked at **10 documents per request** to keep URL length safe):
-  ```text
-  rbukrs eq '{company}' and rldnr eq '0L' and ((belnr eq '{doc1}' and gjahr eq '{yr1}') or ...)
-  ```
-- **Auth**: HTTP Basic Auth using the session credentials from the UI.
-- **TLS**: Support per-profile `AllowInsecureTls` (needed for IP-based QAS certs like `10.60.177.131`; keep `false` for PRD with valid hostname certs).
-- **Atom XML Parsing**:
-  - Iterate `{http://www.w3.org/2005/Atom}entry` → `content` → `{http://schemas.microsoft.com/ado/2007/08/dataservices/metadata}properties`.
-  - Extract `belnr` (strip leading zeros for dictionary key), `gjahr`, `docln` (take last 3 chars as `AccountingDocumentItemID`), `racct`, `zuonr`.
-- **Line Resolution**:
-  - Match Excel row to ACDOCA lines for `(doc.TrimStart('0'), year)` where `line.Racct.TrimStart('0') == row.GlAccount.TrimStart('0')`.
-  - `0` matches → `NO_MATCH`; `> 1` matches → `AMBIGUOUS`; `1` match and `line.Zuonr == row.Target` → `SKIPPED_ALREADY_SET`; otherwise → `PLANNED`.
+### 5.2 Line selection and dispatch
+Look up company, ledger 0L, document and fiscal year via OData. Resolve the worksheet BUZEI, not the G/L account. Cross-check BLART, BUDAT and RACCT before comparing the current assignment. Missing items, ambiguous items and validation failures are not sent. Preview and live both build one SOAP request per document, G/L items before vendor items; XSD validation still gates submission. HTTP acceptance is not a commit: verify ZUONR by reading the exact item back. This client cannot guarantee the ABAP report's SAP-side rollback semantics. No client-side authorization check is added.
 
 ### 5.3 SOAP Change Request (`JournalEntrySoapService`)
 - **Endpoint**:
@@ -167,7 +140,7 @@ avalonia-app/
   - `Authorization: Basic <base64(user:pass)>`
   - `Content-Type: text/xml; charset=utf-8`
   - `SOAPAction: "http://sap.com/xi/SAPSCORE/SFIN/JournalEntryBulkChangeRequest_In/JournalEntryBulkChangeRequest_InRequest"`
-- **Batching**: Group `PLANNED` items by `(Doc, Year)` and chunk into batches of `BatchDocs` (default `50` documents).
+- **Batching**: one document per request in both preview and execution.
 - **CRITICAL SAP Ordering Rule**:
   - Inside `<ns0:JournalEntryBulkChangeRequestMessage>`, emit **all** `<JournalEntryGLItem>` (`BEBAN` / `S`) elements first, followed by **all** `<JournalEntryDebtorCreditorItem>` (`VENDOR` / `K`) elements. Mixing or reversing them causes SAP to silently drop lines.
 - **Exact XML Structure**:
