@@ -38,7 +38,7 @@ flowchart TD
     VALID["lcl_excel_parser\nHeader mapping + row validation\n(BELNR, GJAHR, BUZEI, BLART, BUDAT, RACCT, ZUONR <= 18)"]
     ORCH["lcl_orchestrator\nKey lookup (BUKRS, BELNR, GJAHR, BUZEI)\n+ Field Validation (BLART, BUDAT, RACCT)\n+ Dry-Run / Test-Run / Live Execution & Verification"]
     DB["lif_db_provider -> lcl_db_provider\nBulk SELECT from ACDOCA, BKPF, BSEG"]
-    CHG["lif_doc_changer -> lcl_fi_doc_changer\nENQUEUE_EFBKPF + FI_DOCUMENT_CHANGE\nBAPI_TRANSACTION_COMMIT / ROLLBACK"]
+    CHG["lif_doc_changer -> lcl_fi_doc_changer\nENQUEUE_EFBKPF + BSEG authority preflight + FI_DOCUMENT_CHANGE\nBAPI_TRANSACTION_COMMIT / ROLLBACK"]
     OUT["lcl_alv_presenter\nCL_SALV_TABLE ALV Report + Optional CSV Export"]
 
     UI --> UPLOAD
@@ -107,7 +107,7 @@ Why custom `CL_ABAP_ZIP` + `sXML` instead of OLE2 or `CL_FDT_XL_SPREADSHEET`?
 
 ### 3.3 Database Lookup, Line Resolution & Field Validation (`lcl_db_provider` & `lcl_orchestrator`)
 1. **Authorization Check**:
-   - Check `F_BKPF_BUK` with `BUKRS = p_bukrs` and `ACTVT = '02'` (Change) for Live/Test run.
+   - Check `F_BKPF_BUK` with `BUKRS = p_bukrs` and `ACTVT = '02'` (Change) for Live/Test run. This company check is separate from the locked business-area check in §3.4. No business area is required in the workbook. A dry-run `PLANNED` result does not certify change authority.
 2. **Bulk `ACDOCA` + `BSEG` Lookup**:
    - Query `ACDOCA` for `RBUKRS = @p_bukrs`, `RLDNR = @p_rldnr`, and `FOR ALL ENTRIES IN @lt_doc_keys` (`BELNR = @lt_doc_keys-doc AND GJAHR = @lt_doc_keys-year`), retrieving `BELNR`, `GJAHR`, `DOCLN`, `RACCT`, `BLART`, `BUDAT`, `ZUONR`.
    - Query `BSEG` for `AUGBL` (Clearing Document) to flag cleared items.
@@ -130,8 +130,13 @@ Why custom `CL_ABAP_ZIP` + `sXML` instead of OLE2 or `CL_FDT_XL_SPREADSHEET`?
 - Group all `PLANNED` rows by `(doc, year)`.
 - Process one document per LUW (all-or-nothing per document, matching [`zrfc_fi_change_assign.abap`](zrfc_fi_change_assign.abap)):
   1. Lock document via `CALL FUNCTION 'ENQUEUE_EFBKPF'` (`BELNR`, `BUKRS`, `GJAHR`). If locked by another user, mark document lines `SEND_ERROR` with lock message and continue to next document.
-  2. In `P_TESTRN = 'X'` mode: unlock via `DEQUEUE_EFBKPF` and mark lines `TESTRUN_OK`.
-  3. In `P_EXEC = 'X'` mode:
+  2. **While locked, preflight the complete change set in both Test and Live.** Select `BUZEI, GSBER` once from entry-view `BSEG` for the locked `BUKRS/BELNR/GJAHR`. Match each targeted `it_changes` item by `BUZEI`; do not authorize against spreadsheet values, ACDOCA values, or untargeted document lines. For each target:
+     - No BSEG row: reject the document with `No BSEG item {item}; business area cannot be verified`.
+     - BSEG row exists and `GSBER IS INITIAL`: skip **only the area check** for this item. Keep the item in the change set and continue checking the remaining targets.
+     - Nonblank `GSBER`: require `AUTHORITY-CHECK OBJECT 'F_BKPF_GSB'` with `GSBER` equal to the BSEG value and `ACTVT = '02'`. Check each distinct nonblank area once per document. On denial report `No authorization (F_BKPF_GSB ACTVT 02) for business area {area}`.
+     - On the first failure release `DEQUEUE_EFBKPF`, return failure before any `FI_DOCUMENT_CHANGE` or FI commit, mark **all planned items of this document** `SEND_ERROR` and continue with the next document. An authorized item cannot be changed on its own if a sibling target fails.
+  3. In `P_TESTRN = 'X'` mode: only after successful preflight, unlock via `DEQUEUE_EFBKPF` and mark lines `TESTRUN_OK`.
+  4. In `P_EXEC = 'X'` mode, after successful preflight:
      - Sort items so `BEBAN` (G/L) lines come first, followed by `VENDOR` lines.
      - For each line in the document, build `LT_ACCCHG` (`FDNAME = 'ZUONR'`, `OLDVAL = line-old`, `NEWVAL = line-target`) and call `FI_DOCUMENT_CHANGE` (`I_BUKRS`, `I_BELNR`, `I_GJAHR`, `I_BUZEI`).
      - If any line in the document returns `sy-subrc <> 0`:
@@ -143,9 +148,11 @@ Why custom `CL_ABAP_ZIP` + `sXML` instead of OLE2 or `CL_FDT_XL_SPREADSHEET`?
        - Execute `BAPI_TRANSACTION_COMMIT` with `WAIT = 'X'`.
        - Unlock document (`DEQUEUE_EFBKPF`).
        - Mark lines `SENT`.
-  4. **Post-Commit Verification**:
+  5. **Post-Commit Verification**:
      - Re-query `ACDOCA` (`BYPASSING BUFFER`) for all `SENT` documents.
      - Compare current `ZUONR` with `target`: set final status to `CHANGED` if equal, or `NOT_CHANGED` with diagnostic message if different.
+
+**Authorization scope:** [PR #1](https://github.com/yudhiwidyatama/sapbulkchange/pull/1) introduced the locked preflight; [PR #3](https://github.com/yudhiwidyatama/sapbulkchange/pull/3) supersedes its blank-area rejection. The local changer must enforce company and business-area change authorization explicitly; do not assume the external RFC `FI_AUTH_CHECK_INTF` path runs locally. This does not implement its document type, customer, vendor, G/L account, account type or segment authorization checks. Workbook field comparisons are not authorization checks.
 
 ---
 
@@ -163,9 +170,22 @@ The report includes self-contained local test classes executable via `Ctrl+Shift
 ### 4.2 SAP Code Inspector (SCI) & Transport Readiness Checklist
 - **No obsolete statements**: No `TABLES`, no header-line internal tables, no `OCCURS`, no `FORM`/`PERFORM` (100% ABAP Objects local classes + clean report events).
 - **Memory & Binary Safety**: `SOLIX_TO_XSTRING` respects exact byte count `iv_size` from `GUI_UPLOAD`, preventing corrupted ZIP trailers on macOS and Windows.
-- **SQL Performance**: Single bulk `SELECT ... FOR ALL ENTRIES` against `ACDOCA` and `BSEG` (after checking table non-emptiness and deduplicating keys), zero `SELECT` statements inside loops.
+- **SQL Performance**: Bulk `SELECT ... FOR ALL ENTRIES` against `ACDOCA` and `BSEG` for planning (after checking table non-emptiness and deduplicating keys). During authorization, read entry-view items once per locked document, never once per target item.
 - **LUW & Lock Hygiene**: Explicit `ENQUEUE_EFBKPF` / `DEQUEUE_EFBKPF` and `BAPI_TRANSACTION_COMMIT( WAIT = 'X' )` / `BAPI_TRANSACTION_ROLLBACK` per document.
 - **Safety Dialog in Live Mode**: Confirmation popup (`POPUP_TO_CONFIRM`) before modifying FI documents in live execution mode (`P_EXEC = 'X'`).
+
+### 4.3 Business-area acceptance criteria (required QA, not test results)
+
+| Fixture | Expected in Test and Live |
+|---|---|
+| Company denied; every target area blank | Company check still fails. No change. |
+| All targets blank; company authorized | No `F_BKPF_GSB` check. Items remain eligible. |
+| Blank plus two targets with the same permitted nonblank area | One area check for the document. Test unlocks with `TESTRUN_OK`; Live may change all three. |
+| One permitted target and one denied target | Neither changes. All planned siblings get `SEND_ERROR`; lock released; next independent document proceeds. |
+| BSEG entry missing for a targeted BUZEI | Missing-item diagnostic, not blank-area exemption. Same document-wide failure. |
+| A denied area occurs only on an untargeted item | It does not block the targeted change. |
+
+Verify using a restricted user in a nonproduction client. PR #3 reports activation and syntax check on D00, not an end-to-end restricted-user test.
 
 ---
 
