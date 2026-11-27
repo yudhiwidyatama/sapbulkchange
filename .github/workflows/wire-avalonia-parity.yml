@@ -1,0 +1,51 @@
+name: Wire verified Avalonia parity edits
+on:
+  push:
+    branches: [feature/avalonia-fi-item-parity]
+    paths: [.github/workflows/wire-avalonia-parity.yml]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Apply scoped changes against known source blobs
+        shell: bash
+        run: |
+          set -eu
+          cd avalonia-app/src/SapBulkChange
+          test "$(git hash-object Services/AssignmentChangeOrchestrator.cs)" = e637fc3675085d83e51a623be1206a07d8b2bbba
+          test "$(git hash-object ViewModels/MainWindowViewModel.cs)" = 3c891172de17925d613cae2d9ce7f31bc277f3c3
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('Services/AssignmentChangeOrchestrator.cs'); s = p.read_text()
+          a = s.index('            foreach (var r in rows)'); b=s.index('\n        }',a)
+          s = s[:a] + '            foreach (var r in rows)\n                plan.Add(AcdocaODataService.PlanLine(r, items));' + s[b:]
+          s=s.replace('var batches = ChunkByDoc(plannedRows, Math.Max(1, options.BatchDocs));','var batches = ChunkByDoc(plannedRows, 1);')
+          s=s.replace('        progress(5);','        _previewScope = null;\n        progress(5);',1)
+          s=s.replace('    public async Task<List<ChangePlanRow>> PreviewAsync(','''    private (string OData, string Soap, string Company, string Start, string End, int? Limit)? _previewScope;
+              private static (string,string,string,string,string,int?) Scope(ExecutionOptions o) =>
+                  (o.ODataBaseUrl, o.SoapEndpointUrl, o.CompanyCode, o.StartDate, o.EndDate, o.LimitDocs);
+
+              public async Task<List<ChangePlanRow>> PreviewAsync(''')
+          s=s.replace('        return plan;', '        _previewScope = Scope(options);\n        return plan;',1)
+          a=s.index('        var ts =',s.index('public async Task ExecuteAsync'))
+          s=s[:a]+'        if (_previewScope != Scope(options)) throw new InvalidOperationException("Target or scope changed; preview the file again before execution.");\n'+s[a:]
+          p.write_text(s)
+          p=Path('ViewModels/MainWindowViewModel.cs'); s=p.read_text(); s=s.replace('LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH','LineStatus.VALIDATION_FAILED or LineStatus.ITEM_NOT_FOUND or LineStatus.DOC_NOT_FOUND or LineStatus.NO_MATCH'); s=s.replace('            ExcelFilePath = filePath;', '            _allPlanRows.Clear();\n            _parsedExcelRows.Clear();\n            ApplyFilterAndCounts();\n            ExcelFilePath = filePath;'); p.write_text(s)
+          p=Path('Services/ExcelReaderService.cs'); p.write_text(p.read_text().replace("value.Split(' ', 'T')[0]", "value.Split(new[] { ' ', 'T' }, 2)[0]"))
+          p=Path('../../DESIGN_SPEC.md'); s=p.read_text(); a=s.index('### 5.1'); b=s.index('### 5.3',a); s=s[:a]+'''### 5.1 Excel input (implemented contract)
+          Read the first worksheet, accepting combined Doc Number + Year or separate BELNR and fiscal year (fallback: posting-date year). Required: line item (BUZEI), document type, posting date, G/L account, and KODE PROJECT (1–18 characters). Headers accept the FBL3N aliases in ExcelReaderService. Source Data defaults to BEBAN; VENDOR explicitly selects a vendor item. Account is optional. Invalid rows are reported with worksheet row number and excluded.
+
+          ### 5.2 Line selection and dispatch
+          Look up company, ledger 0L, document and fiscal year via OData. Resolve the worksheet BUZEI, not the G/L account. Cross-check BLART, BUDAT and RACCT before comparing the current assignment. Missing items, ambiguous items and validation failures are not sent. Preview and live both build one SOAP request per document, G/L items before vendor items; XSD validation still gates submission. HTTP acceptance is not a commit: verify ZUONR by reading the exact item back. This client cannot guarantee the ABAP report's SAP-side rollback semantics. No client-side authorization check is added.
+
+          '''+s[b:]; s=s.replace('chunk into batches of **','chunk into batches of **'); import re; s=re.sub(r'^- \*\*Batching\*\*:.*$', '- **Batching**: one document per request in both preview and execution.', s,flags=re.M); p.write_text(s)
+          PY
+          cd ../../..
+          git rm .github/workflows/wire-avalonia-parity.yml
+          git add avalonia-app
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Wire exact item validation and document-scoped SOAP execution into the desktop app'
+          git push origin HEAD:feature/avalonia-fi-item-parity
