@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="640" viewBox="0 0 880 640" role="img" aria-labelledby="title desc">
+  <title id="title">The pelican’s seaside commute</title>
+  <desc id="desc">A white pelican in a red scarf rides a coral bicycle along the waterfront. One wing reaches the handlebars and orange webbed feet turn the pedals.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0.2" y2="1">
+      <stop stop-color="#f6e5bb"/><stop offset="1" stop-color="#fff5df"/>
+    </linearGradient>
+    <g id="wheel" stroke-linecap="round">
+      <circle r="77" fill="#faf2d9" fill-opacity=".72" stroke="#223d46" stroke-width="12"/>
+      <circle r="70" fill="none" stroke="#cb9c64" stroke-width="3"/>
+      <g stroke="#86a4a1" stroke-width="2.4">
+        <path id="spoke" d="M-68 0H68 M0-68V68"/>
+        <use href="#spoke" transform="rotate(22.5)"/><use href="#spoke" transform="rotate(45)"/><use href="#spoke" transform="rotate(67.5)"/>
+      </g>
+      <circle r="8" fill="#223d46"/>
+    </g>
+  </defs>
+  <rect x="12" y="12" width="856" height="616" rx="36" fill="url(#sky)" stroke="#29494e" stroke-width="4"/>
+  <circle cx="640" cy="174" r="85" fill="#f3bd72"/>
+  <path d="M78 374q80-19 160-3t162 1 173-4 231 3" fill="none" stroke="#a3c6b8" stroke-width="4"/>
+  <g fill="none" stroke="#9ebbb1" stroke-width="3" stroke-linecap="round">
+    <path d="M113 389h67m482 4h50m19 0h32M74 411h41m590 7h66M660 95q10-6 19 5 7-13 18-13m26 35q7-4 13 3 5-9 13-9"/>
+  </g>
+  <ellipse cx="437" cy="564" rx="283" ry="13" fill="#bcc5a7" opacity=".65"/>
+  <use href="#wheel" x="257" y="478"/><use href="#wheel" x="614" y="478"/>
+  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Behind the frame: far leg, webbed foot and pedal. -->
+    <path d="M354 330q22 38 11 67l24 31" stroke="#354d50" stroke-width="12"/>
+    <path d="M375 414l19 11 17 2-6 6 8 3-32 2z" fill="#e39a51" stroke="#354d50" stroke-width="3"/>
+    <path d="M380 440h34" stroke="#354d50" stroke-width="7"/>
+    <!-- Coral mixte frame, fork, saddle and swept handlebars. -->
+    <path id="frame" d="M257 478l100-115 70 114-170 1m100-115 191 6-121 108m121-108 66 109m-66-109-11-31m-180 25-13-24" stroke="#293f46" stroke-width="14"/>
+    <use href="#frame" style="stroke:#dc6952"/>
+    <path d="M257 478l100-115 70 114-170 1m100-115 191 6-121 108m121-108 66 109m-66-109-11-31m-180 25-13-24" stroke="#df6952" stroke-width="8"/>
+    <path d="M316 336q20-6 51-1" stroke="#293f46" stroke-width="12"/>
+    <path d="M537 339l-8-29q-2-9 13-10l20-2" stroke="#293f46" stroke-width="7"/>
+    <path d="M553 299l18-2" stroke="#9c613e" stroke-width="10"/>
+    <path d="M544 302q37 28 24 70" stroke="#637776" stroke-width="2.5"/>
+    <circle cx="427" cy="477" r="17" fill="#eead75" stroke="#354d50" stroke-width="5"/>
+    <path d="M396 440l31 37 31 31m-15 2h36" stroke="#354d50" stroke-width="6"/>
+  </g>
+  <!-- Pelican: tail, folded body, upright neck and oversized pouch. -->
+  <g stroke="#293f46" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M388 314q-14 40-3 62l49 49 15 65" fill="none" stroke-width="14"/>
+    <path d="M388 314q-14 40-3 62l49 49 15 65" fill="none" stroke="#e49a52" stroke-width="8"/>
+    <path d="M445 484q7 5 14 9l21 8-11 1 8 5-33-2q-7-7 1-21z" fill="#efa557" stroke-width="3.5"/>
+    <path d="M314 260l-81-32 31 36-33-9q29 44 83 48z" fill="#667d7b" stroke-width="4"/>
+    <path d="M270 253q56-30 106-19 36 8 50-16 8-14 8-43-13-13-9-33 4-24 29-34 25-9 49 7 19 12 20 33l-20 23q-15 5-18 17-2 17 1 42 5 57-46 88-38 25-87 14-50-9-83-79z" fill="#fff9e8" stroke-width="5"/>
+    <path d="M275 256q59 8 102 37-54 15-89-17l17 1z" fill="#b9c9bd" stroke="none"/>
+    <path d="M449 126q8-11 20-12" fill="none" stroke="#d4cbb2" stroke-width="4"/>
+    <path d="M503 150q43-1 75 13l82 29q-29 31-73 32-56 2-91-46l-6-12z" fill="#f5af64" stroke-width="4.5"/>
+    <path d="M500 155q19-16 58-6 45 12 103 41l7 7-16-2q-82-23-156-24z" fill="#fbd488" stroke-width="4"/>
+    <path d="M521 179q33 42 80 37" fill="none" stroke="#dd8a51" stroke-width="3"/>
+    <circle cx="491" cy="141" r="6.3" fill="#293f46" stroke="none"/><circle cx="493" cy="139" r="1.7" fill="white" stroke="none"/>
+    <!-- Windblown scarf -->
+    <path d="M437 207q-39-5-69-30-14-12-47-10l16 11-14 5q21-2 41 13 30 20 72 22z" fill="#d55e4d" stroke-width="3.5"/>
+    <path d="M431 201q19 12 51 9l2 13q-27 4-55-10z" fill="#e47759" stroke-width="3.5"/>
+    <!-- Forward wing rests on grip -->
+    <path d="M366 259q25-9 50 0l69 29q20 8 57 3l19 2q2 6-13 9l7 2q-10 9-41 8-35 3-72-9l-57-17" fill="#f6efdb" stroke-width="4"/>
+    <path d="M401 270q42 10 69 25m-56-15q34 9 53 18" fill="none" stroke="#c0c6b5" stroke-width="2.7"/>
+  </g>
+  <g fill="none" stroke="#be9971" stroke-width="3" stroke-linecap="round"><path d="M156 288h69m-51 13h33m-95 148h42"/></g>
+</svg>
