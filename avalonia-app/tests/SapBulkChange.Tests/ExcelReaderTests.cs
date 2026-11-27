@@ -6,131 +6,42 @@ namespace SapBulkChange.Tests;
 
 public class ExcelReaderTests
 {
-    private readonly ExcelReaderService _sut = new();
-
-    [Fact]
-    public void Read_SampleExcelFile_ParsesValidRows()
+    private static readonly string[] Headers = [" BELNR ", "Itm", "Doc. Type", "Pstng Date", "HKONT", "KODE PROJECT"];
+    private static Models.ExcelReadResult Read(string[] headers, params string[][] rows)
     {
-        var samplePath = FindSampleExcel();
-        if (samplePath is null)
-            return;
-
-        var result = _sut.Read(samplePath);
-        Assert.NotEmpty(result.Rows);
-        Assert.All(result.Rows, r =>
-        {
-            Assert.Equal(10, r.Doc.Length);
-            Assert.Equal(4, r.Year.Length);
-            Assert.True(r.Source is "BEBAN" or "VENDOR");
-            Assert.InRange(r.TargetAssignment.Length, 1, ExcelReaderService.AssignmentMaxLength);
-        });
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".xlsx");
+        try {
+            using (var wb = new XLWorkbook()) {
+                var ws = wb.AddWorksheet("FI");
+                int r = 0;
+                foreach (var values in new[] {headers}.Concat(rows)) {
+                    r++; for (int c=0;c<values.Length;c++) ws.Cell(r,c+1).Value = values[c];
+                }
+                wb.SaveAs(path);
+            }
+            return new ExcelReaderService().Read(path);
+        } finally { File.Delete(path); }
     }
 
-    [Fact]
-    public void Read_MissingRequiredColumn_ThrowsInvalidDataException()
+    [Theory]
+    [InlineData("43496.0")][InlineData("31.01.2019")][InlineData("20190131")][InlineData("2019-01-31")]
+    public void SeparateKeyAndDateFallback(string date)
     {
-        var path = CreateTempWorkbook(ws =>
-        {
-            ws.Cell(1, 1).Value = "Doc Number + Year";
-            ws.Cell(1, 2).Value = "Source Data";
-        });
-
-        try
-        {
-            var ex = Assert.Throws<InvalidDataException>(() => _sut.Read(path));
-            Assert.Contains("KODE PROJECT", ex.Message);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        var row = Assert.Single(Read(Headers, new string[]{"42","2.0","sa",date,"4000","NEW"}).Rows);
+        Assert.Equal(("0000000042","2019","002","SA",new DateOnly(2019,1,31),"BEBAN"),
+            (row.Doc,row.Year,row.Item,row.DocumentType,row.PostingDate,row.Source));
     }
-
-    [Fact]
-    public void Read_MixedValidAndInvalidRows_RecordsWarningsAndExcludesInvalid()
+    [Fact] public void CombinedKeyAndExplicitSource()
     {
-        var path = CreateTempWorkbook(ws =>
-        {
-            ws.Cell(1, 1).Value = "Doc Number + Year";
-            ws.Cell(1, 2).Value = "Source Data";
-            ws.Cell(1, 3).Value = "G/L Account";
-            ws.Cell(1, 4).Value = "Account";
-            ws.Cell(1, 5).Value = "KODE PROJECT";
-
-            // Row 2: Valid BEBAN
-            ws.Cell(2, 1).Value = "1000041372019";
-            ws.Cell(2, 2).Value = "beban";
-            ws.Cell(2, 3).Value = "51000100";
-            ws.Cell(2, 4).Value = "51000100";
-            ws.Cell(2, 5).Value = "P-1409SCC-TTES0601";
-
-            // Row 3: Blank key (skipped silently)
-            ws.Cell(3, 1).Value = "";
-
-            // Row 4: Short key -> warning
-            ws.Cell(4, 1).Value = "1234";
-            ws.Cell(4, 2).Value = "VENDOR";
-            ws.Cell(4, 5).Value = "P-123";
-
-            // Row 5: Unknown Source Data -> warning
-            ws.Cell(5, 1).Value = "1000041372019";
-            ws.Cell(5, 2).Value = "OTHER";
-            ws.Cell(5, 5).Value = "P-123";
-
-            // Row 6: Target > 18 chars -> warning
-            ws.Cell(6, 1).Value = "1000041372019";
-            ws.Cell(6, 2).Value = "VENDOR";
-            ws.Cell(6, 5).Value = "1234567890123456789";
-
-            // Row 7: Valid VENDOR
-            ws.Cell(7, 1).Value = "1000109202019";
-            ws.Cell(7, 2).Value = "VENDOR";
-            ws.Cell(7, 3).Value = "21000100";
-            ws.Cell(7, 4).Value = "V001";
-            ws.Cell(7, 5).Value = "P-1411SCC-TTES0717";
-        });
-
-        try
-        {
-            var result = _sut.Read(path);
-            Assert.Equal(2, result.Rows.Count);
-            Assert.Equal(3, result.Warnings.Count);
-
-            Assert.Equal("0100004137", result.Rows[0].Doc);
-            Assert.Equal("2019", result.Rows[0].Year);
-            Assert.Equal("BEBAN", result.Rows[0].Source);
-            Assert.Equal("S", result.Rows[0].ItemType);
-
-            Assert.Equal("0100010920", result.Rows[1].Doc);
-            Assert.Equal("VENDOR", result.Rows[1].Source);
-            Assert.Equal("K", result.Rows[1].ItemType);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        var h = Headers.Append("Source Data").ToArray(); h[0] = "Doc Number + Year";
+        var row = Assert.Single(Read(h,new string[]{"422020","001","KR","2019-12-31","4000","NEW","vendor"}).Rows);
+        Assert.Equal("2020",row.Year); Assert.Equal("K",row.ItemType);
     }
-
-    private static string CreateTempWorkbook(Action<IXLWorksheet> populate)
+    [Fact] public void MissingRequiredColumnsAreFatal() => Assert.Contains("Line Item",Assert.Throws<InvalidDataException>(() => Read(["BELNR"])).Message);
+    [Fact] public void InvalidRowsAreExcludedAndIdentified()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"sapbulk_test_{Guid.NewGuid():N}.xlsx");
-        using var wb = new XLWorkbook();
-        var ws = wb.Worksheets.Add("Sheet1");
-        populate(ws);
-        wb.SaveAs(path);
-        return path;
-    }
-
-    private static string? FindSampleExcel()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidate = Path.Combine(dir.FullName, "Contoh Data SAP for change Assignment.xlsx");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
-        }
-        return null;
+        var result = Read(Headers,["42","1000","SA","20190131","4000","NEW"], ["42","1","SA","bad","4000","NEW"],
+            ["42","1","SA","20190131","4000","1234567890123456789"], ["","1","","","",""], ["42","1","SA","20190131","4000","VALID"]);
+        Assert.Single(result.Rows); Assert.Equal(new[]{2,3,4},result.Warnings.Select(w => w.XlRow));
     }
 }
