@@ -1,11 +1,9 @@
 # T06 · Implement submission, execution and reconciliation
 
-**Owner:** background ABAP developer. **Depends on:** T03, T04, T05. **Contract:** [execution and recovery](../design/execution.md).
+**Executor:** implementation agent. **Depends on:** T03, T04, T05. **Read:** [execution and recovery](../design/execution.md). **Produce:** guarded Submit, durable dispatch, job class, per-document checkpoints, verification-only retry and support reconciliation procedure.
 
-**Deliver:** guarded Submit action, outbox dispatcher, job class, per-document checkpoint handler, verification-only retry and support reconciliation view/procedure.
+1. Verify ownership, current plan and stored mode. No Live without eligible items and explicit confirmation. Atomically claim submission; identical replay returns existing execution. Finish Plan without FI dispatch.
+2. Run under the initiator's current effective authority. Persist intent before entering FI; never commit job metadata inside its LUW. Dispatch once per eligible document; continue after known document failure. Persist known outcome, read back ACDOCA independently and fan statuses out to linked rows.
+3. Unknown commit goes to reconciliation; resume known committed work only by reading. An expired lease is not permission to reapply a change. Counters reflect persisted results.
 
-1. Verify ownership, current plan and confirmed mode; block Live with no eligible items or no confirmation. Atomic accept/claim; identical replay returns existing execution. Finish Plan without scheduling FI work.
-2. Run as the initiating user's effective identity. Before entering FI persist intent. Dispatch once per eligible document; never commit job metadata inside its FI LUW. Continue after known document failure. Persist known outcome; perform independent ACDOCA read-back and fan out statuses to linked source rows.
-3. Route unknown commit to reconciliation; resume known committed work only by reading. Never convert an expired worker lease into permission to reapply a change. Preserve diagnostics and tie counters to persisted results.
-
-**Accept:** concurrent submit, crash before dispatch, crash after commit before recording confirmation, transient verification outage and lost HTTP response. Show call counts and checkpoints: no duplicate FI update, no premature `CHANGED`, and independent documents can complete. Exercise negative identity/authority at execution time, not just at Submit.
+**Accept:** inject concurrent submits, crash before dispatch, crash after commit before confirmation is recorded, verification outage and lost HTTP response. Show no duplicate FI update, premature `CHANGED` or cross-document rollback. Prove effective permission at execution, not just at Submit. **Handoff:** link fault-injection tests/checkpoints in [session state](../SESSION.md); humans verify restricted target behavior in QA, not by providing a privileged service account.

@@ -1,11 +1,11 @@
-# T01 · Prove the target stack and worker identity
+# T01 · Prove the target stack and effective user
 
-**Owner:** ABAP platform lead with Basis and FI security. **Depends on:** none. **Design:** [decisions](../design/analysis.md).
+**Executor:** implementation agent. **Depends on:** none. **Read:** [decisions](../design/analysis.md), [session workflow](../../../FIORI_DESIGN.md).
 
-**Deliver:** a signed architecture decision record, minimal nonproduction service/job spike and release inventory (S/4HANA, ABAP, Gateway, UI5, chosen binding, upload and launchpad deployment options). Reserve package, namespace and transport ownership.
+**Produce:** a decision record, minimal harmless service/job spike, repeatable QA script and release inventory: S/4HANA, ABAP, Gateway, UI5, binding, media upload, scheduling and launchpad deployment. Propose package/namespace and transport layout. Mark unknown installed capabilities unverified.
 
-1. In the actual target release, upload harmless binary bytes and read them back server-side without a GUI; expose a paged entity and bound action. Record extension and CSRF mechanisms available.
-2. Schedule a harmless job from a restricted user. Record effective identity and prove an allowed and a denied company/area outcome without updating FI. A name stored on the run is not proof of effective authorization.
-3. Confirm local FI adapter support, SAP lock/commit behavior and approved read scope with FI/Basis. Record browser vs logical-file policy, job scheduler, storage and unresolved gates.
+1. Inspect available tools and repo first. Implement a harmless bytes-in/bytes-out upload, paged query and action against the proposed binding; document CSRF and supported extensions. If the stack is unavailable, supply the spike and exact target QA steps rather than claiming success.
+2. Prepare a nonproduction job initiated by a restricted user. Record the effective identity and allowed/denied company and area decisions without updating FI. A username saved on the run is not proof of effective authorization.
+3. Record local FI adapter support, lock/update-task assumptions, storage, scheduler, browser/server-file policy and blockers. Supply an alternative if the preferred binding is unsupported; do not broaden privilege.
 
-**Accept:** independent reviewer repeats the smoke test in QA; identity, service binding and failure behavior are documented. If authority cannot be preserved, approve Plan Only at most and explicitly block Test/Live. Do not work around the gate with broader batch permissions.
+**Human boundary:** QA runs/witnesses target smoke and identity tests. Ask for guidance only on environment or policy choices that cannot be inferred. No human is asked to implement the spike. **Accept:** repeatable target smoke and identity evidence linked in [checkpoint](../SESSION.md); absent that proof, no Test/Live enablement. Continue offline parity work where safe.

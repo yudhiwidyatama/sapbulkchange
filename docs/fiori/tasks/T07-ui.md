@@ -1,11 +1,9 @@
-# T07 · Build Assignment Runs, review and result pages
+# T07 · Build Assignment Runs, review and results
 
-**Owner:** SAPUI5/Fiori elements developer. **Depends on:** T05; mock Submit until T06. **Contract:** [page and interaction design](../design/experience.md).
+**Executor:** implementation agent. **Depends on:** T05; use contract fixtures until T06 is ready. **Read:** [experience](../design/experience.md). **Produce:** manifest, annotations, List Report/Object Page, supported upload/review extension, i18n, intent definition and UI tests.
 
-**Deliver:** app manifest, annotations, List Report/Object Page, supported upload/review extension, i18n texts, launchpad intent definition and UI tests. Fixture-driven mock service must implement the same fields and error shape as the actual binding.
+1. Bind filters, value help, required parameters and `1000`, `0L`, `0`, Plan defaults. Upload one workbook; Prepare obtains counts, warnings and version from server. Do not compute authority or authoritative eligibility in JavaScript.
+2. Implement mode availability, cancellation, focus and explicit live confirmation scoped to stored plan. Require fresh review on conflict. Recover state on lost reply, not a second execution.
+3. Bind persistent item details, sibling diagnostics, queued and verification-pending states. Integrate T08 full-run export. Support keyboard use and narrow layouts.
 
-1. Bind list filters, value helps and required parameters; show `1000`, `0L`, `0` and Plan defaults. Upload one workbook; Prepare obtains counts, warnings and version from server. Don't calculate authorization or target eligibility in JavaScript.
-2. Add mode-specific action availability, cancellation, focus management and live confirmation scoped to stored plan. Handle stale/conflict by refreshing and requiring review; on lost response recover run state rather than generating a new execution.
-3. Bind item detail and status text to persistent outcomes, show the group diagnostic and pending verification distinctly, expose authorized full-run download (T08). Support keyboard-only operation and narrow layout.
-
-**Accept:** UI automation walks new → review → cancel → apply → reopen; zero writes on cancel and one execution on double click. Include empty-state, missing-header, denied-area, no-eligible-item and reconciliation examples. Demonstrate with keyboard and both macOS/Windows browsers.
+**Accept:** automate New → Review → Cancel → Apply → Reopen against fixtures; zero writes on cancel and one execution on double click. Include empty, missing-header, denied-area, no-eligible-item and reconciliation states. **Human QA:** supply exact keyboard path and expected macOS/Windows observations; request only browser checks not otherwise verified. Record environment and evidence in [session state](../SESSION.md).

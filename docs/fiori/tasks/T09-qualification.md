@@ -1,11 +1,9 @@
-# T09 · Qualify end-to-end behavior in a nonproduction client
+# T09 · Qualify end-to-end behavior
 
-**Owner:** test automation developer with FI/security testers. **Depends on:** T06, T07, T08. **Test charter:** [Q1–Q8 matrix](../design/assurance.md).
+**Executor:** agent authors fixtures, automation, QA script, defect fixes and reruns. **Human role:** execute/witness nonproduction QA and report observed results; no implementation assignment. **Depends on:** T06–T08. **Read:** [Q1–Q8](../design/assurance.md).
 
-**Deliver:** versioned synthetic workbook fixtures, expected row/CSV files, ABAP Unit and service/UI test reports, restricted-user integration evidence and load/limits report. Never commit production workbooks, roles with credentials or personal data.
+1. Produce versioned synthetic workbooks, expected rows/CSV, repeatable ABAP Unit, service and UI runs. Compare report/app Plans and distinguish intentional ambiguity/duplicate safeguards from regressions.
+2. Prepare a restricted-user QA packet: prerequisites, exact steps, expected rows/statuses, FI before/after and released lock evidence for allowed/denied company and area, blank GSBER, missing-item double, lock conflict, failing second line and read-back. Use controlled QA documents only. No credentials or raw sensitive traces in repo.
+3. Inject duplicate submit and worker failures, compare export bytes, check keyboard/access behavior, benchmark representative and over-limit sizes. Record client/software level, role (not credentials), timestamp, fixture digest and correlation ID. Reproduce and fix reported defects yourself.
 
-1. Run report-vs-app Plan on identical fixtures. Separate intentional duplicate/ambiguity safeguards from regressions; reconcile worksheet rows, unique items and per-document counts.
-2. Execute both Test and Live in controlled FI QA with allowed/denied company and area profiles, real blank GSBER, missing-item double, lock conflict, failing second line, and positive/negative read-back. Record FI before/after and lock release, not just screenshots. PR #3 syntax activation alone does not satisfy this gate.
-3. Inject duplicate submit and worker failures from T06. Verify safe recovery, CSV byte parity, keyboard path, full-run export access, and performance at approved representative and over-limit sizes. Record client/software level, test identity role, timestamp, fixture digest and correlation ID.
-
-**Accept:** map each Q ID to repeatable evidence or an explicit blocking defect; FI and security owners sign restricted-user behavior. Do not label unexecuted QA cases as passed. Hand approved numeric limits and open risks to T10.
+**Accept:** map each Q ID to repeatable evidence or a blocking defect. Distinguish local, mock, actual QA and unrun cases. Syntax activation is not restricted-user end-to-end evidence. Save human QA disposition and guidance on numeric limits in [session state](../SESSION.md). T10 cannot substitute a self-issued sign-off for missing evidence.
