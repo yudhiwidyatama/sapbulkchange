@@ -1,0 +1,30 @@
+name: Materialize verified FI report
+on:
+  push:
+    branches: [fix/business-area-authorization]
+    paths: [.github/workflows/apply-verified-fi-patch.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    if: github.repository == 'yudhiwidyatama/sapbulkchange'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Apply exact patch to report only
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=zfi_bulk_change_assign.abap
+          test "$(git rev-parse HEAD:patches/business-area-authorization.patch)" = 585cbe132ab4e35016538d8dc1d00dbb2bfad030
+          git show HEAD:patches/business-area-authorization.patch > "$RUNNER_TEMP/fi.patch"
+          git switch -c fi-business-area-report origin/main
+          test "$(git rev-parse HEAD:$report)" = b13256ca34e7877a2dad50bb19958b5eee3388c4
+          git apply --index "$RUNNER_TEMP/fi.patch"
+          test "$(git rev-parse :$report)" = a801cea4f9deaa8d7c96884925da26604ee6a1b1
+          test "$(git diff --cached --name-only)" = "$report"
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Require business area change authorization for targeted FI items'
+          git push origin HEAD:refs/heads/fi-business-area-report
