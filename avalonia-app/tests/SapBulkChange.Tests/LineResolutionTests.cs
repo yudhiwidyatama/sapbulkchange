@@ -6,70 +6,37 @@ namespace SapBulkChange.Tests;
 
 public class LineResolutionTests
 {
-    [Fact]
-    public void ParseAtomFeed_ExtractsAcdocaLinesCorrectly()
-    {
-        const string atomXml = """
-            <?xml version="1.0" encoding="utf-8"?>
-            <feed xmlns="http://www.w3.org/2005/Atom"
-                  xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"
-                  xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices">
-              <entry>
-                <content type="application/xml">
-                  <m:properties>
-                    <d:belnr>0100004137</d:belnr>
-                    <d:gjahr>2019</d:gjahr>
-                    <d:docln>000001</d:docln>
-                    <d:racct>0051000100</d:racct>
-                    <d:zuonr>OLD_ASSIGN</d:zuonr>
-                  </m:properties>
-                </content>
-              </entry>
-            </feed>
-            """;
+    private static readonly DateOnly Date = new(2019,1,31);
+    private static readonly ExcelInputRow Row = new(2,"0000000042","2019","BEBAN","4000","","NEW","002","SA",Date);
+    private static readonly AcdocaLine Hit = new("42","2019","002","00004000","OLD","SA",Date);
 
-        var lines = AcdocaODataService.ParseAtomFeed(atomXml);
-        var line = Assert.Single(lines);
-        Assert.Equal("0100004137", line.Belnr);
-        Assert.Equal("2019", line.Gjahr);
-        Assert.Equal("001", line.Item);
-        Assert.Equal("0051000100", line.Racct);
-        Assert.Equal("OLD_ASSIGN", line.CurrentAssignment);
+    [Fact] public void AtomPostingDateAndTypeReachThePlanner()
+    {
+        const string xml = """
+        <feed xmlns="http://www.w3.org/2005/Atom" xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"><entry><content><m:properties><belnr>42</belnr><gjahr>2019</gjahr><docln>000002</docln><racct>00004000</racct><blart>SA</blart><budat>2019-01-31T00:00:00</budat><zuonr>OLD</zuonr></m:properties></content></entry></feed>
+        """;
+        Assert.Equal(Hit,Assert.Single(AcdocaODataService.ParseAtomFeed(xml)));
     }
-
-    [Fact]
-    public void ResolveLine_HandlesAllResolutionCases()
+    [Fact] public void ExactItemFlowsIntoBulkRequestEvenWhenGlIsShared()
     {
-        var row = new ExcelInputRow(2, "0100004137", "2019", "BEBAN", "51000100", "51000100", "P-NEW");
-
-        // 0 items -> DOC_NOT_FOUND
-        var (l0, s0) = AcdocaODataService.ResolveLine(row, []);
-        Assert.Null(l0);
-        Assert.Equal(LineStatus.DOC_NOT_FOUND, s0);
-
-        // No matching racct -> NO_MATCH
-        var otherAcct = new AcdocaLine("0100004137", "2019", "001", "0099999999", "OLD");
-        var (l1, s1) = AcdocaODataService.ResolveLine(row, [otherAcct]);
-        Assert.Null(l1);
-        Assert.Equal(LineStatus.NO_MATCH, s1);
-
-        // Multiple matching racct -> AMBIGUOUS
-        var m1 = new AcdocaLine("0100004137", "2019", "001", "0051000100", "OLD1");
-        var m2 = new AcdocaLine("0100004137", "2019", "002", "0051000100", "OLD2");
-        var (l2, s2) = AcdocaODataService.ResolveLine(row, [m1, m2]);
-        Assert.Null(l2);
-        Assert.Equal(LineStatus.AMBIGUOUS, s2);
-
-        // 1 match already equal -> SKIPPED_ALREADY_SET
-        var same = new AcdocaLine("0100004137", "2019", "001", "0051000100", "P-NEW");
-        var (l3, s3) = AcdocaODataService.ResolveLine(row, [same]);
-        Assert.NotNull(l3);
-        Assert.Equal(LineStatus.SKIPPED_ALREADY_SET, s3);
-
-        // 1 match different -> PLANNED
-        var diff = new AcdocaLine("0100004137", "2019", "001", "0051000100", "P-OLD");
-        var (l4, s4) = AcdocaODataService.ResolveLine(row, [diff]);
-        Assert.NotNull(l4);
-        Assert.Equal(LineStatus.PLANNED, s4);
+        var plan = AcdocaODataService.PlanLine(Row,[Hit with {Item="001"},Hit]);
+        Assert.Equal(LineStatus.PLANNED,plan.Status);
+        var soap = new JournalEntrySoapService();
+        var envelope = soap.BuildSoapEnvelope([plan],"1000","TEST",DateTime.UtcNow);
+        Assert.Equal("002",Assert.Single(envelope.Descendants("AccountingDocumentItemID")).Value);
+        Assert.Equal("NEW",Assert.Single(envelope.Descendants("AssignmentReference")).Value);
+    }
+    [Fact] public void MissingAmbiguousAndUnchangedAreNeverPlanned()
+    {
+        Assert.Equal(LineStatus.DOC_NOT_FOUND,AcdocaODataService.PlanLine(Row,[]).Status);
+        Assert.Equal(LineStatus.ITEM_NOT_FOUND,AcdocaODataService.PlanLine(Row,[Hit with { Item="001" }]).Status);
+        Assert.Equal(LineStatus.AMBIGUOUS,AcdocaODataService.PlanLine(Row,[Hit,Hit]).Status);
+        Assert.Equal(LineStatus.SKIPPED_ALREADY_SET,AcdocaODataService.PlanLine(Row,[Hit with {CurrentAssignment="NEW"}]).Status);
+    }
+    [Fact] public void AllMismatchesReportedEvenIfAssignmentAlreadyEqualsTarget()
+    {
+        var p = AcdocaODataService.PlanLine(Row,[Hit with { DocumentType="KR",PostingDate=null,Racct="41",CurrentAssignment="NEW" }]);
+        Assert.Equal(LineStatus.VALIDATION_FAILED,p.Status);
+        foreach(var field in new[]{"Document Type","Posting Date","G/L Account"}) Assert.Contains(field,p.Message);
     }
 }
