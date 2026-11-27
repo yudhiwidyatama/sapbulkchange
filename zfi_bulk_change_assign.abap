@@ -1092,9 +1092,10 @@ CLASS lcl_fi_doc_changer IMPLEMENTATION.
         ev_message = |No BSEG item { ls_target-item }; business area cannot be verified|.
         EXIT.
       ENDIF.
+      " Standard FI (FI_AUTH_CHECK_INTF) checks F_BKPF_GSB only for items
+      " with a business area; blank business area is not checked.
       IF ls_area-gsber IS INITIAL.
-        ev_message = |Blank business area on item { ls_target-item }; change not permitted|.
-        EXIT.
+        CONTINUE.
       ENDIF.
       IF line_exists( lt_checked_areas[ table_line = ls_area-gsber ] ).
         CONTINUE.
