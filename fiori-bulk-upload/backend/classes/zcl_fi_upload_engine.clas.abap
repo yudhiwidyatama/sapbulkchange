@@ -37,7 +37,7 @@ CLASS zcl_fi_upload_engine DEFINITION PUBLIC FINAL CREATE PUBLIC.
 
     CLASS-METHODS set_status
       IMPORTING iv_status TYPE zfi_upl_item-status
-                iv_field  TYPE csequence OPTIONAL
+                iv_field  TYPE string OPTIONAL
                 iv_text   TYPE string OPTIONAL
       CHANGING  cs_item   TYPE zfi_upl_item.
 
@@ -69,11 +69,12 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
                                         iv_rldnr    = iv_rldnr
                                         it_doc_keys = lt_keys ).
 
+    DATA lt_diff TYPE string_table.
     LOOP AT ct_items ASSIGNING FIELD-SYMBOL(<i>) WHERE status = zif_fi_upl_types=>gc_item_status-new.
 
       IF NOT line_exists( lt_lines[ belnr = <i>-belnr gjahr = <i>-gjahr ] ).
         set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-doc_not_found
-                              iv_field  = 'Document Number'
+                              iv_field  = `Document Number`
                               iv_text   = zcl_fi_upl_msg=>text( iv_no = '015' iv_v1 = <i>-belnr iv_v2 = <i>-gjahr iv_v3 = iv_bukrs )
                     CHANGING  cs_item   = <i> ).
         CONTINUE.
@@ -82,7 +83,7 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
       ASSIGN lt_lines[ belnr = <i>-belnr gjahr = <i>-gjahr buzei = <i>-buzei ] TO FIELD-SYMBOL(<l>).
       IF sy-subrc <> 0.
         set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-item_not_found
-                              iv_field  = 'Line Item'
+                              iv_field  = `Line Item`
                               iv_text   = zcl_fi_upl_msg=>text( iv_no = '016' iv_v1 = <i>-buzei iv_v2 = <i>-belnr iv_v3 = <i>-gjahr )
                     CHANGING  cs_item   = <i> ).
         CONTINUE.
@@ -92,7 +93,6 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
       <i>-augbl     = <l>-augbl.
 
       " Document type, posting date and G/L account must match the system line.
-      DATA lt_diff TYPE string_table.
       CLEAR lt_diff.
       IF to_upper( condense( CONV string( <i>-blart ) ) ) <> to_upper( condense( CONV string( <l>-blart ) ) ).
         APPEND |Document Type (file { <i>-blart } / system { <l>-blart })| TO lt_diff.
@@ -108,11 +108,7 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
 
       IF lt_diff IS NOT INITIAL.
         set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-validation_failed
-                              iv_field  = COND #( WHEN lines( lt_diff ) = 1 THEN SWITCH string( substring( val = lt_diff[ 1 ] len = 4 )
-                                                          WHEN 'Docu' THEN 'Document Type'
-                                                          WHEN 'Post' THEN 'Posting Date'
-                                                          ELSE 'G/L Account' )
-                                          ELSE 'Document Type / Posting Date / G/L Account' )
+                              iv_field  = `Doc Type / Date / G/L`
                               iv_text   = zcl_fi_upl_msg=>text( iv_no = '017'
                                             iv_v1 = VALUE string( lt_diff[ 1 ] OPTIONAL )
                                             iv_v2 = VALUE string( lt_diff[ 2 ] OPTIONAL )
@@ -127,8 +123,8 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
                     CHANGING  cs_item   = <i> ).
       ELSE.
         set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-planned
-                              iv_text   = COND #( WHEN <l>-augbl IS NOT INITIAL
-                                                  THEN zcl_fi_upl_msg=>text( iv_no = '018' iv_v1 = <l>-augbl ) )
+                              iv_text   = COND string( WHEN <l>-augbl IS NOT INITIAL
+                                                       THEN zcl_fi_upl_msg=>text( iv_no = '018' iv_v1 = <l>-augbl ) )
                     CHANGING  cs_item   = <i> ).
       ENDIF.
     ENDLOOP.
@@ -143,7 +139,7 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
       ASSIGN lt_locks[ belnr = <i>-belnr gjahr = <i>-gjahr ] TO FIELD-SYMBOL(<lock>).
       IF sy-subrc = 0.
         set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-locked
-                              iv_field  = 'Document Number'
+                              iv_field  = `Document Number`
                               iv_text   = zcl_fi_upl_msg=>text( iv_no = '019' iv_v1 = <lock>-owner )
                     CHANGING  cs_item   = <i> ).
       ENDIF.
@@ -177,7 +173,7 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
              WHERE belnr = <d>-belnr AND gjahr = <d>-gjahr
                AND status = zif_fi_upl_types=>gc_item_status-planned.
           set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-send_error
-                                iv_field  = 'KODE PROJECT'
+                                iv_field  = `KODE PROJECT`
                                 iv_text   = ls_result-message
                       CHANGING  cs_item   = <e> ).
         ENDLOOP.
@@ -197,15 +193,16 @@ CLASS zcl_fi_upload_engine IMPLEMENTATION.
            WHERE belnr = <s>-belnr AND gjahr = <s>-gjahr
              AND status = zif_fi_upl_types=>gc_item_status-planned.
         ASSIGN lt_lines[ belnr = <v>-belnr gjahr = <v>-gjahr buzei = <v>-buzei ] TO FIELD-SYMBOL(<l>).
-        IF sy-subrc = 0 AND <l>-zuonr = <v>-target_zuonr.
+        DATA(lv_found) = xsdbool( sy-subrc = 0 ).
+        IF lv_found = abap_true AND <l>-zuonr = <v>-target_zuonr.
           set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-changed
                                 iv_text   = zcl_fi_upl_msg=>text( '021' )
                       CHANGING  cs_item   = <v> ).
         ELSE.
           set_status( EXPORTING iv_status = zif_fi_upl_types=>gc_item_status-not_changed
-                                iv_field  = 'KODE PROJECT'
+                                iv_field  = `KODE PROJECT`
                                 iv_text   = zcl_fi_upl_msg=>text( iv_no = '023'
-                                              iv_v1 = COND #( WHEN sy-subrc = 0 THEN <l>-zuonr ) )
+                                              iv_v1 = COND string( WHEN lv_found = abap_true THEN <l>-zuonr ) )
                       CHANGING  cs_item   = <v> ).
         ENDIF.
       ENDLOOP.

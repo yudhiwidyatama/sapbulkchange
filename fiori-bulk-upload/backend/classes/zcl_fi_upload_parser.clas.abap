@@ -53,9 +53,9 @@ CLASS zcl_fi_upload_parser DEFINITION PUBLIC FINAL CREATE PUBLIC.
       RETURNING VALUE(rv_value) TYPE string.
 
     METHODS set_error
-      IMPORTING iv_field TYPE csequence
+      IMPORTING iv_field TYPE string
                 iv_msgno TYPE symsgno
-                iv_v1    TYPE csequence OPTIONAL
+                iv_v1    TYPE string OPTIONAL
       CHANGING  cs_item  TYPE zfi_upl_item.
 
     CLASS-METHODS header_key
@@ -132,9 +132,10 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
     IF cs_item-status <> zif_fi_upl_types=>gc_item_status-new.
       RETURN.   " keep the first error of the row
     ENDIF.
+    DATA(lv_v1) = COND string( WHEN iv_v1 IS SUPPLIED THEN iv_v1 ELSE iv_field ).
     cs_item-status      = zif_fi_upl_types=>gc_item_status-excel_error.
     cs_item-error_field = iv_field.
-    cs_item-message     = zcl_fi_upl_msg=>text( iv_no = iv_msgno iv_v1 = COND #( WHEN iv_v1 IS SUPPLIED THEN iv_v1 ELSE iv_field ) ).
+    cs_item-message     = zcl_fi_upl_msg=>text( iv_no = iv_msgno iv_v1 = lv_v1 ).
   ENDMETHOD.
 
   METHOD normalize_numc.
@@ -243,7 +244,7 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
       " Document number
       DATA(lv_belnr) = normalize_numc( iv_text = lv_belnr_txt iv_len = 10 ).
       IF lv_belnr IS INITIAL OR lv_belnr CO '0'.
-        set_error( EXPORTING iv_field = 'Document Number' iv_msgno = '007' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `Document Number` iv_msgno = '007' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-belnr = lv_belnr.
       ENDIF.
@@ -251,7 +252,7 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
       " Posting date (needed before the fiscal year default)
       DATA(lv_budat) = parse_excel_date( lv_budat_txt ).
       IF lv_budat IS INITIAL.
-        set_error( EXPORTING iv_field = 'Posting Date' iv_msgno = '010' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `Posting Date` iv_msgno = '010' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-budat = lv_budat.
       ENDIF.
@@ -260,41 +261,41 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
       IF lv_gjahr_txt IS NOT INITIAL.
         DATA(lv_gjahr) = normalize_numc( iv_text = lv_gjahr_txt iv_len = 4 ).
         IF lv_gjahr IS INITIAL OR lv_gjahr = '0000'.
-          set_error( EXPORTING iv_field = 'Fiscal Year' iv_msgno = '008' CHANGING cs_item = ls_item ).
+          set_error( EXPORTING iv_field = `Fiscal Year` iv_msgno = '008' CHANGING cs_item = ls_item ).
         ELSE.
           ls_item-gjahr = lv_gjahr.
         ENDIF.
       ELSEIF lv_budat IS NOT INITIAL.
         ls_item-gjahr = lv_budat(4).
       ELSE.
-        set_error( EXPORTING iv_field = 'Fiscal Year' iv_msgno = '008' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `Fiscal Year` iv_msgno = '008' CHANGING cs_item = ls_item ).
       ENDIF.
 
       " Line item 1..999
       DATA(lv_buzei) = normalize_numc( iv_text = lv_buzei_txt iv_len = 3 ).
       IF lv_buzei IS INITIAL OR lv_buzei = '000'.
-        set_error( EXPORTING iv_field = 'Line Item' iv_msgno = '009' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `Line Item` iv_msgno = '009' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-buzei = lv_buzei.
       ENDIF.
 
       " Document type, G/L account
       IF lv_blart_txt IS INITIAL OR strlen( lv_blart_txt ) > 4.
-        set_error( EXPORTING iv_field = 'Document Type' iv_msgno = '011' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `Document Type` iv_msgno = '011' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-blart = to_upper( lv_blart_txt ).
       ENDIF.
       IF lv_racct_txt IS INITIAL OR strlen( lv_racct_txt ) > 10.
-        set_error( EXPORTING iv_field = 'G/L Account' iv_msgno = '011' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `G/L Account` iv_msgno = '011' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-racct = lv_racct_txt.
       ENDIF.
 
       " Target assignment (ZUONR is CHAR 18)
       IF lv_target_txt IS INITIAL.
-        set_error( EXPORTING iv_field = 'KODE PROJECT' iv_msgno = '011' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `KODE PROJECT` iv_msgno = '011' CHANGING cs_item = ls_item ).
       ELSEIF strlen( lv_target_txt ) > 18.
-        set_error( EXPORTING iv_field = 'KODE PROJECT' iv_msgno = '012' CHANGING cs_item = ls_item ).
+        set_error( EXPORTING iv_field = `KODE PROJECT` iv_msgno = '012' CHANGING cs_item = ls_item ).
       ELSE.
         ls_item-target_zuonr = lv_target_txt.
       ENDIF.
@@ -307,7 +308,7 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
         IF lv_source = zif_fi_upl_types=>gc_source_beban OR lv_source = zif_fi_upl_types=>gc_source_vendor.
           ls_item-source_data = lv_source.
         ELSE.
-          set_error( EXPORTING iv_field = 'Source Data' iv_msgno = '013' CHANGING cs_item = ls_item ).
+          set_error( EXPORTING iv_field = `Source Data` iv_msgno = '013' CHANGING cs_item = ls_item ).
         ENDIF.
       ENDIF.
 
@@ -316,7 +317,7 @@ CLASS zcl_fi_upload_parser IMPLEMENTATION.
         DATA(lv_key) = |{ ls_item-belnr }{ ls_item-gjahr }{ ls_item-buzei }|.
         READ TABLE lt_seen ASSIGNING FIELD-SYMBOL(<seen>) WITH TABLE KEY dockey = lv_key.
         IF sy-subrc = 0.
-          set_error( EXPORTING iv_field = 'Line Item' iv_msgno = '014' iv_v1 = |{ <seen>-row_no }|
+          set_error( EXPORTING iv_field = `Line Item` iv_msgno = '014' iv_v1 = |{ <seen>-row_no }|
                      CHANGING cs_item = ls_item ).
         ELSE.
           INSERT VALUE #( dockey = lv_key row_no = <row>-row_no ) INTO TABLE lt_seen.
