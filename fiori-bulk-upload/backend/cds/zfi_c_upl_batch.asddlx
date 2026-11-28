@@ -1,0 +1,96 @@
+@Metadata.layer: #CORE
+@UI: {
+  headerInfo: {
+    typeName: 'Upload Batch',
+    typeNamePlural: 'Upload Batches',
+    title: { type: #STANDARD, value: 'FileName' },
+    description: { type: #STANDARD, value: 'Status' }
+  },
+  presentationVariant: [{ sortOrder: [{ by: 'CreatedAt', direction: #DESC }], visualizations: [{ type: #AS_LINEITEM }] }]
+}
+annotate entity ZFI_C_UPL_BATCH with
+{
+  @UI.facet: [
+    { id: 'General', purpose: #STANDARD, type: #IDENTIFICATION_REFERENCE, label: 'General', position: 10 },
+    { id: 'Counts',  purpose: #STANDARD, type: #FIELDGROUP_REFERENCE, targetQualifier: 'Counts', label: 'Results', position: 20 },
+    { id: 'Items',   purpose: #STANDARD, type: #LINEITEM_REFERENCE, targetElement: '_Item', label: 'Rows', position: 30 }
+  ]
+
+  @UI.hidden: true
+  BatchUUID;
+
+  @UI: {
+    lineItem: [ { position: 10, label: 'Company Code' } ],
+    identification: [ { position: 10, label: 'Company Code' } ],
+    selectionField: [ { position: 10 } ]
+  }
+  CompanyCode;
+
+  @UI: {
+    lineItem: [ { position: 20, label: 'Ledger' } ],
+    identification: [ { position: 20, label: 'Ledger' } ]
+  }
+  Ledger;
+
+  @UI: {
+    lineItem: [
+      { position: 30, label: 'File', },
+      { type: #FOR_ACTION, dataAction: 'validate', label: 'Validate', position: 10 },
+      { type: #FOR_ACTION, dataAction: 'post', label: 'Post', position: 20 }
+    ],
+    identification: [
+      { position: 30, label: 'File' },
+      { type: #FOR_ACTION, dataAction: 'validate', label: 'Validate', position: 10 },
+      { type: #FOR_ACTION, dataAction: 'post', label: 'Post', position: 20 }
+    ]
+  }
+  Attachment;
+
+  @UI.hidden: true
+  MimeType;
+  @UI.hidden: true
+  FileName;
+
+  @UI: {
+    lineItem: [ { position: 40, label: 'Status', criticality: 'StatusCriticality' } ],
+    identification: [ { position: 40, label: 'Status', criticality: 'StatusCriticality' } ],
+    selectionField: [ { position: 20 } ]
+  }
+  Status;
+
+  @UI.hidden: true
+  StatusCriticality;
+  @UI.hidden: true
+  RequestedAction;
+
+  @UI.identification: [ { position: 50, label: 'Message' } ]
+  Message;
+
+  @UI: { lineItem: [ { position: 50, label: 'Rows' } ], fieldGroup: [ { qualifier: 'Counts', position: 10, label: 'Rows in file' } ] }
+  NumRows;
+  @UI: { lineItem: [ { position: 60, label: 'Planned' } ], fieldGroup: [ { qualifier: 'Counts', position: 20, label: 'Planned' } ] }
+  NumPlanned;
+  @UI: { fieldGroup: [ { qualifier: 'Counts', position: 30, label: 'Already set' } ] }
+  NumSkipped;
+  @UI: { lineItem: [ { position: 70, label: 'Errors' } ], fieldGroup: [ { qualifier: 'Counts', position: 40, label: 'Errors' } ] }
+  NumError;
+  @UI: { fieldGroup: [ { qualifier: 'Counts', position: 50, label: 'Locked' } ] }
+  NumLocked;
+  @UI: { lineItem: [ { position: 80, label: 'Changed' } ], fieldGroup: [ { qualifier: 'Counts', position: 60, label: 'Changed' } ] }
+  NumChanged;
+
+  @UI.hidden: true
+  FileSize;
+  @UI.hidden: true
+  FileHash;
+  @UI: { lineItem: [ { position: 90, label: 'Created At' } ] }
+  CreatedAt;
+  @UI.hidden: true
+  CreatedBy;
+  @UI.hidden: true
+  LocalLastChangedBy;
+  @UI.hidden: true
+  LocalLastChangedAt;
+  @UI.hidden: true
+  LastChangedAt;
+}

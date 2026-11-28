@@ -1,0 +1,24 @@
+@EndUserText.label : 'FI bulk upload item (one Excel row)'
+@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zfi_upl_item {
+  key client       : abap.clnt not null;
+  key batch_uuid   : sysuuid_x16 not null;
+  key row_no       : abap.int4 not null;
+  bukrs            : bukrs;
+  belnr            : belnr_d;
+  gjahr            : gjahr;
+  buzei            : buzei;
+  blart            : blart;
+  budat            : budat;
+  racct            : racct;
+  target_zuonr     : dzuonr;
+  source_data      : abap.char(6);
+  old_zuonr        : dzuonr;
+  augbl            : augbl;
+  status           : abap.char(20);
+  error_field      : abap.char(30);
+  message          : abap.char(220);
+}

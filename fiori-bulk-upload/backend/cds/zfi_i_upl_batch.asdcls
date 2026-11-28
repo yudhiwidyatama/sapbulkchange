@@ -1,0 +1,6 @@
+@EndUserText.label: 'Access control for upload batch (display by company code)'
+@MappingRole: true
+define role ZFI_I_UPL_BATCH {
+  grant select on ZFI_I_UPL_BATCH
+    where ( CompanyCode ) = aspect pfcg_auth( F_BKPF_BUK, BUKRS, ACTVT = '03' );
+}

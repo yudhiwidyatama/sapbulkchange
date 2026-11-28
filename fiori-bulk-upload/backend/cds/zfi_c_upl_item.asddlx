@@ -1,0 +1,42 @@
+@Metadata.layer: #CORE
+@UI: {
+  headerInfo: { typeName: 'Row', typeNamePlural: 'Rows' },
+  presentationVariant: [{ sortOrder: [{ by: 'RowNo', direction: #ASC }], visualizations: [{ type: #AS_LINEITEM }] }]
+}
+annotate entity ZFI_C_UPL_ITEM with
+{
+  @UI.hidden: true
+  BatchUUID;
+  @UI.hidden: true
+  CompanyCode;
+  @UI.lineItem: [ { position: 10, label: 'Excel Row' } ]
+  RowNo;
+  @UI.lineItem: [ { position: 20, label: 'Status', criticality: 'StatusCriticality' } ]
+  Status;
+  @UI.hidden: true
+  StatusCriticality;
+  @UI.lineItem: [ { position: 30, label: 'Document Number' } ]
+  DocumentNumber;
+  @UI.lineItem: [ { position: 40, label: 'Fiscal Year' } ]
+  FiscalYear;
+  @UI.lineItem: [ { position: 50, label: 'Line Item' } ]
+  LineItem;
+  @UI.lineItem: [ { position: 60, label: 'Document Type' } ]
+  DocumentType;
+  @UI.lineItem: [ { position: 70, label: 'Posting Date' } ]
+  PostingDate;
+  @UI.lineItem: [ { position: 80, label: 'G/L Account' } ]
+  GLAccount;
+  @UI.lineItem: [ { position: 90, label: 'KODE PROJECT (new)' } ]
+  TargetAssignment;
+  @UI.lineItem: [ { position: 100, label: 'Assignment (current)' } ]
+  OldAssignment;
+  @UI.lineItem: [ { position: 110, label: 'Field' } ]
+  ErrorField;
+  @UI.lineItem: [ { position: 120, label: 'Message' } ]
+  Message;
+  @UI.hidden: true
+  SourceData;
+  @UI.hidden: true
+  ClearingDocument;
+}

@@ -1,0 +1,89 @@
+managed implementation in class zbp_fi_i_upl_batch unique;
+strict ( 2 );
+
+define behavior for ZFI_I_UPL_BATCH alias Batch
+persistent table zfi_upl_batch
+with additional save
+lock master
+authorization master ( instance )
+etag master LocalLastChangedAt
+{
+  create;
+  update ( features : instance );
+  delete ( features : instance );
+
+  field ( numbering : managed, readonly ) BatchUUID;
+  field ( mandatory : create ) CompanyCode, Ledger, Attachment;
+  field ( readonly ) Status, RequestedAction, Message, FileSize, FileHash,
+                     NumRows, NumPlanned, NumSkipped, NumError, NumLocked, NumChanged,
+                     CreatedBy, CreatedAt, LocalLastChangedBy, LocalLastChangedAt, LastChangedAt;
+  field ( readonly : update ) CompanyCode, Ledger;
+
+  action ( features : instance ) validate result [1] $self;
+  action ( features : instance ) post result [1] $self;
+
+  determination onFile on modify { create; field Attachment; }
+  validation checkInput on save { create; update; field CompanyCode, Ledger, Attachment; }
+
+  association _Item;
+
+  mapping for zfi_upl_batch
+  {
+    BatchUUID          = batch_uuid;
+    CompanyCode        = bukrs;
+    Ledger             = rldnr;
+    Status             = status;
+    RequestedAction    = requested_action;
+    Message            = message;
+    Attachment         = attachment;
+    MimeType           = mimetype;
+    FileName           = filename;
+    FileSize           = file_size;
+    FileHash           = file_hash;
+    NumRows            = n_rows;
+    NumPlanned         = n_planned;
+    NumSkipped         = n_skipped;
+    NumError           = n_error;
+    NumLocked          = n_locked;
+    NumChanged         = n_changed;
+    CreatedBy          = created_by;
+    CreatedAt          = created_at;
+    LocalLastChangedBy = local_last_changed_by;
+    LocalLastChangedAt = local_last_changed_at;
+    LastChangedAt      = last_changed_at;
+  }
+}
+
+// Rows are written by the background job (direct SQL) and are read-only for consumers.
+define behavior for ZFI_I_UPL_ITEM alias Item
+persistent table zfi_upl_item
+lock dependent by _Batch
+authorization dependent by _Batch
+etag dependent by _Batch
+{
+  field ( readonly ) BatchUUID, RowNo, CompanyCode, DocumentNumber, FiscalYear, LineItem,
+                     DocumentType, PostingDate, GLAccount, TargetAssignment, SourceData,
+                     OldAssignment, ClearingDocument, Status, ErrorField, Message;
+
+  association _Batch;
+
+  mapping for zfi_upl_item
+  {
+    BatchUUID        = batch_uuid;
+    RowNo            = row_no;
+    CompanyCode      = bukrs;
+    DocumentNumber   = belnr;
+    FiscalYear       = gjahr;
+    LineItem         = buzei;
+    DocumentType     = blart;
+    PostingDate      = budat;
+    GLAccount        = racct;
+    TargetAssignment = target_zuonr;
+    SourceData       = source_data;
+    OldAssignment    = old_zuonr;
+    ClearingDocument = augbl;
+    Status           = status;
+    ErrorField       = error_field;
+    Message          = message;
+  }
+}

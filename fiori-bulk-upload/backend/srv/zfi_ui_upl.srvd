@@ -1,0 +1,5 @@
+@EndUserText.label: 'FI Assignment bulk upload'
+define service ZFI_UI_UPL {
+  expose ZFI_C_UPL_BATCH as Batch;
+  expose ZFI_C_UPL_ITEM  as Item;
+}
