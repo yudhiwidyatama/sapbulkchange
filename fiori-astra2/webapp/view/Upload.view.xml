@@ -1,0 +1,13 @@
+<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m" xmlns:u="sap.ui.unified" controllerName="astra.fi.assign.controller.Upload" height="100%">
+  <Page title="{i18n>title}" busy="{run>/busy}" busyIndicatorDelay="0"><content><VBox class="sapUiResponsiveContentPadding sapUiSmallMarginTop">
+    <Label text="{i18n>company}" labelFor="company" required="true"/><Input id="company" width="12rem" maxLength="4" value="{run>/company}" liveChange=".resetPlan" showValueHelp="true" valueHelpRequest=".chooseCompany"/>
+    <Label text="{i18n>workbook}" labelFor="workbook" required="true"/><u:FileUploader id="workbook" fileType="xlsx" multiple="false" uploadOnChange="false" change=".chooseFile" typeMissmatch=".invalidFile"/>
+    <Text text="{i18n>limits}"/><Link text="{i18n>template}" press=".downloadTemplate"/>
+    <MessageStrip class="sapUiSmallMarginTop" visible="{= !!${run>/message} }" text="{run>/message}" type="{run>/messageType}" showIcon="true"/>
+    <Toolbar><Title text="{i18n>preview}"/><ToolbarSpacer/><Button text="{i18n>refresh}" press=".refreshRun" enabled="{= !!${run>/id} }"/><Button text="{i18n>errors}" press=".errors" enabled="{run>/canExport}"/></Toolbar>
+    <Text text="{run>/summary}"/><Table id="rows" items="{run>/rows}" noDataText="{i18n>noData}"><columns>
+      <Column><Text text="{i18n>row}"/></Column><Column><Text text="{i18n>key}"/></Column><Column><Text text="{i18n>old}"/></Column><Column><Text text="{i18n>target}"/></Column><Column><Text text="{i18n>status}"/></Column><Column demandPopin="true" minScreenWidth="Tablet"><Text text="{i18n>detail}"/></Column>
+    </columns><items><ColumnListItem><cells><Text text="{run>RowNo}"/><Text text="{run>Document} / {run>Year} / {run>Item}"/><Text text="{run>OldAssignment}"/><Text text="{run>TargetAssignment}"/><Text text="{run>Status}"/><Text text="{run>Field} {run>Message}"/></cells></ColumnListItem></items></Table>
+    <HBox><Button text="{i18n>previous}" enabled="{run>/previous}" press=".previousPage"/><Button text="{i18n>next}" enabled="{run>/next}" press=".nextPage"/></HBox>
+  </VBox></content><footer><OverflowToolbar><ToolbarSpacer/><Button text="{i18n>validate}" press=".validate" enabled="{run>/canValidate}" type="{= ${run>/canApply} ? 'Default' : 'Emphasized' }"/><Button text="{i18n>apply}" press=".confirmApply" enabled="{run>/canApply}" type="{= ${run>/canApply} ? 'Emphasized' : 'Default' }"/></OverflowToolbar></footer></Page>
+</mvc:View>

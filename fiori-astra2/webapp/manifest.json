@@ -1,0 +1,13 @@
+{
+  "_version":"1.49.0",
+  "sap.app":{
+    "id":"astra.fi.assign","type":"application","title":"{{title}}","i18n":"i18n/i18n.properties","applicationVersion":{"version":"0.1.0"},
+    "dataSources":{"mainService":{"uri":"/sap/opu/odata4/sap/zfi_assign_upload/srvd/sap/zfi_assign_upload/0001/","type":"OData","settings":{"odataVersion":"4.0"}}}
+  },
+  "sap.ui":{"technology":"UI5","deviceTypes":{"desktop":true,"tablet":true,"phone":true}},
+  "sap.ui5":{
+    "dependencies":{"minUI5Version":"1.108.0","libs":{"sap.m":{},"sap.ui.core":{},"sap.ui.unified":{},"sap.fe.core":{}}},
+    "models":{"":{"dataSource":"mainService","preload":true,"settings":{"operationMode":"Server","autoExpandSelect":true}},"i18n":{"type":"sap.ui.model.resource.ResourceModel","settings":{"bundleName":"astra.fi.assign.i18n.i18n","supportedLocales":[""],"fallbackLocale":""}}},
+    "routing":{"routes":[{"pattern":":?query:","name":"Upload","target":"Upload"}],"targets":{"Upload":{"type":"Component","id":"Upload","name":"sap.fe.core.fpm","options":{"settings":{"contextPath":"/Runs","viewName":"astra.fi.assign.view.Upload"}}}}}
+  }
+}
