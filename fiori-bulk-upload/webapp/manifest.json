@@ -1,0 +1,109 @@
+{
+	"_version": "1.49.0",
+	"sap.app": {
+		"id": "zfi.upl",
+		"type": "application",
+		"i18n": "i18n/i18n.properties",
+		"title": "{{appTitle}}",
+		"description": "{{appDescription}}",
+		"applicationVersion": { "version": "1.0.0" },
+		"dataSources": {
+			"mainService": {
+				"uri": "/sap/opu/odata4/sap/zfi_ui_upl_o4/srvd/sap/zfi_ui_upl/0001/",
+				"type": "OData",
+				"settings": {
+					"odataVersion": "4.0"
+				}
+			}
+		}
+	},
+	"sap.ui": {
+		"technology": "UI5",
+		"deviceTypes": { "desktop": true, "tablet": true, "phone": false }
+	},
+	"sap.ui5": {
+		"rootView": {
+			"viewName": "sap.fe.templates.RootContainer.view.Fcl",
+			"type": "XML",
+			"async": true,
+			"id": "appRootView"
+		},
+		"dependencies": {
+			"minUI5Version": "1.108.0",
+			"libs": {
+				"sap.m": {},
+				"sap.ui.core": {},
+				"sap.fe.templates": {},
+				"sap.ui.export": {}
+			}
+		},
+		"models": {
+			"i18n": {
+				"type": "sap.ui.model.resource.ResourceModel",
+				"settings": { "bundleName": "zfi.upl.i18n.i18n" }
+			},
+			"": {
+				"dataSource": "mainService",
+				"preload": true,
+				"settings": {
+					"operationMode": "Server",
+					"autoExpandSelect": true,
+					"earlyRequests": true
+				}
+			}
+		},
+		"routing": {
+			"routes": [
+				{ "pattern": ":?query:", "name": "BatchList", "target": "BatchList" },
+				{ "pattern": "Batch({key}):?query:", "name": "BatchObjectPage", "target": "BatchObjectPage" }
+			],
+			"targets": {
+				"BatchList": {
+					"type": "Component",
+					"id": "BatchList",
+					"name": "sap.fe.templates.ListReport",
+					"options": {
+						"settings": {
+							"contextPath": "/Batch",
+							"initialLoad": "Enabled",
+							"navigation": {
+								"Batch": { "detail": { "route": "BatchObjectPage" } }
+							},
+							"controlConfiguration": {
+								"@com.sap.vocabularies.UI.v1.LineItem": {
+									"tableSettings": {
+										"creationMode": { "name": "NewPage" }
+									},
+									"actions": {
+										"downloadTemplate": {
+											"press": "zfi.upl.ext.Template.download",
+											"visible": true,
+											"enabled": true,
+											"requiresSelection": false,
+											"text": "{i18n>downloadTemplate}"
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				"BatchObjectPage": {
+					"type": "Component",
+					"id": "BatchObjectPage",
+					"name": "sap.fe.templates.ObjectPage",
+					"options": {
+						"settings": {
+							"contextPath": "/Batch"
+						}
+					}
+				}
+			}
+		},
+		"contentDensities": { "compact": true, "cozy": true }
+	},
+	"sap.fiori": {
+		"registrationIds": [],
+		"archeType": "transactional"
+	}
+}
