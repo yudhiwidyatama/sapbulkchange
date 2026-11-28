@@ -2,11 +2,11 @@
 
 Initial handoff: documentation only. Prior ABAP report activation is not Fiori QA. The design pack preceding this workflow was committed at `5d771d0a5ddadef5f38305cd72fd86ed529429b8`. Check current HEAD rather than checking out that old commit.
 
-**Next action:** continue the T01 media/paging/action contract offline; separately witness [the job identity probe](t01-identity-qa.md) in authorized nonproduction QA.
+**Next action:** stage the Fiori job artifacts in authorized nonproduction development/QA, then run [the Fiori-only test](t01-fiori-qa.md). The earlier manual SM36 test is not requested. Continue the media/paging/action contract offline while target access is unavailable.
 
 | Task | Status | Evidence / next boundary |
 |---|---|---|
-| T01 | In progress | Identity probe and synthetic evidence tests; target identity and binding not run. |
+| T01 | In progress | Fiori Application Jobs template, worker and log supplied; target run and binding not verified. |
 | T02 | Planned | Characterize parser and resolver. |
 | T03 | Planned | Model state and concurrent claims. |
 | T04 | Planned | Test locked preflight with doubles. |
@@ -16,6 +16,13 @@ Initial handoff: documentation only. Prior ABAP report activation is not Fiori Q
 | T08 | Planned | Compare full-run CSV bytes. |
 | T09 | Planned | Prepare Q1–Q8 evidence. |
 | T10 | Planned | Assemble release pack; no deployment implied. |
+
+## 2026-11-28 · T01 Fiori scheduling slice
+
+- Guidance: develop the check in Fiori before asking for a test. No manual SAP GUI job or Python comparison is required of QA. No target access, role or release approval was supplied.
+- `fiori/t01-identity-probe`, starting at `89c130ce35d30e65206749173464a0400fc017b3`. Added `spikes/t01/apj/` (class, catalog, template and log object), `spikes/t01/test_apj.py`, [staging and Fiori QA card](t01-fiori-qa.md), this checkpoint. The standard Fiori Application Jobs screen schedules this read-only diagnostic; it is not the bulk-assignment review screen. No FI code path changed.
+- Offline: Python 3.12.16; `python3 -m unittest discover -s spikes/t01 -v` (scratch mirror: `-s t01`): 4 tests passed. Two static tests check template → catalog → worker → log and parameter → authority mappings; two synthetic tests check the earlier evidence comparator. No Fiori browser, ABAP compiler or scheduler was run.
+- Target NOT RUN: activation, Fiori submission, log retrieval, identity and authorization decisions, including the swapped-company negative control. Test/Live stay disabled. Future submission mechanisms must be qualified from their actual entry point. No manual SM36 evidence substitutes for that.
 
 ## 2026-11-28 · T01 identity slice
 

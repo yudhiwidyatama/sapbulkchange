@@ -1,0 +1,19 @@
+# T01: schedule the permission check in Fiori
+
+**Decision (2026-11-28):** for this probe the actual submit screen is the standard Fiori **Application Jobs** app (F1240), not SM36 and not a mock. Schedule submits the selected job template to SAP's application job framework. The worker records its own SAP user and checks permissions. No user name, ABAP program, FI document, mode or target assignment can be supplied as a probe parameter. The application stores a job and its evidence log, not financial data. Do not select an alternate execution user. This does not yet wire Submit on the future bulk-assignment review page; if that page initiates scheduling via a different service, repeat this test through that service.
+
+## Staging gate (implementation artifacts, not tester tasks)
+
+Use approved development → nonproduction transport only. In `spikes/t01/apj/` the class source and ABAP file-format definitions specify all four objects. Activate the application log object `ZFI_T01` with subobject `IDENTITY`, then the global class `ZCL_FI_T01_PROBE`, then the class-based Application Job Catalog Entry `ZFI_T01_PROBE`, then the Application Job Template `ZFI_T01_CHECK` referencing that entry. No template defaults. If source import of the JSON formats is unavailable, the ADT object editors can create the same objects from the supplied names, descriptions and mappings. Use the standard ABAP language version. Confirm in ADT that the class interfaces, BALI log methods and customer-defined application jobs are supported on the installed release. Do not transport this QA package to production.
+
+Verify the nonproduction Fiori launchpad has Application Jobs, its job-log display and an approved restricted user who may schedule this template for self and view their own results. Do not grant roles to make a test pass. No separate UI5 deployment is required for this probe: SAP supplies the screen. Missing capability, template, log access or authority is a blocker; do not fall back to SM36 and call it a Fiori result.
+
+## Test from Fiori, end to end
+
+1. Sign in to the QA launchpad with the restricted account. Before opening the job, note the expected backend user, SID and client and the independently approved fixtures: one allowed company, one denied company, one allowed business area, one denied area (change activity `02`). No real accounting documents are needed.
+2. Open **Application Jobs → Create**. Select **Check FI job permissions (QA only)** (`ZFI_T01_CHECK`). Enter the four fixture codes in the labeled fields. Choose **Start Immediately**, one run, no recurrence, and **Schedule** once. Note the job ID/creation time and scheduling user. If submission is uncertain, look up the original job rather than resubmitting.
+3. Refresh the list, open that exact job and its application log. Check its runtime user against the restricted login (not just the job owner); check the SID, client and four values against step 1. Expected codes: allowed company `0`, denied company `4`, allowed area `0`, denied area `4`. A finished status alone is not evidence. Missing log, mismatched user, unexpected allow or any other code is not a pass.
+4. Negative control: submit a separate one-time job with the two **company** values swapped. It must not satisfy the check; if executed, its log should show `4` for the expected allow and `0` for the expected deny and the worker signals a mismatch. Do not change the user's roles. No FI writes occur in either case.
+5. Return only date, sanitized job references, whether runtime identity matched, four return codes for each case and observed status. Keep names, raw logs and real fixture values in the approved evidence store. No Python, GUI transactions, exports or RPA required.
+
+Offline reproduction: `python3 -m unittest discover -s spikes/t01 -v`. This inspects source mappings and synthetic evidence only. SAP activation, Fiori scheduling, log visibility and restricted-user results are unverified.

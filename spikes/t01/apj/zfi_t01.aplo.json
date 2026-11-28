@@ -1,0 +1,5 @@
+{
+  "formatVersion": "1",
+  "header": {"description": "FI job permissions QA", "originalLanguage": "en"},
+  "subobjects": [{"name": "IDENTITY", "description": "Observed job identity and permissions"}]
+}
