@@ -1,0 +1,15 @@
+@EndUserText.label : 'FI assignment upload runs - private staging'
+@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE
+@AbapCatalog.tableCategory : #TRANSPARENT
+@AbapCatalog.deliveryClass : #A
+@AbapCatalog.dataMaintenance : #RESTRICTED
+define table zfi_astra_run {
+  key client       : abap.clnt not null;
+  key run_id       : sysuuid_x16 not null;
+  requester        : syuname;
+  company_code     : bukrs;
+  phase            : abap.char(16);
+  revision         : abap.int4;
+  created_at       : timestampl;
+  workbook         : abap.rawstring(0);
+}
