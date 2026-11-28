@@ -1,0 +1,26 @@
+name: Prepare local UI5 preview
+on:
+  push:
+    branches: [test/astra2-upload-page]
+    paths: [.github/workflows/astra-local-preview-once.yml]
+permissions: {contents: write}
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd fiori-astra2
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('test/demo_server.py');s=p.read_text();i=s.index("            if path.startswith('/resources/'):");j=s.index('            file=',i);s=s[:i]+'''            # Set the bootstrap URL directly, not via a redirect: UI5 derives its resource root from the script element.
+                      if path in ('/', '/index.html'):
+                          page=(WEB/'index.html').read_text().replace('src="/resources/sap-ui-core.js"','src="https://ui5.sap.com/1.108.57/resources/sap-ui-core.js"')
+                          return self.reply(200,page.encode(),'text/html; charset=utf-8')
+          '''+s[j:];p.write_text(s)
+          p=Path('webapp/controller/Upload.controller.js');s=p.read_text();s=s.replace("const service=this.getView().getModel().getServiceUrl();", "const service=this.getAppComponent().getManifestEntry('/sap.app/dataSources/mainService/uri');");s=s.replace("if(item)this.clearPlan(item.getTitle());},afterClose:()=>dialog.destroy()", "if(item)this.clearPlan(item.getTitle());setTimeout(()=>dialog.destroy(),0);},cancel:()=>setTimeout(()=>dialog.destroy(),0)");p.write_text(s)
+          PY
+          python -m py_compile test/demo_server.py
+          git add test/demo_server.py webapp/controller/Upload.controller.js
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Use an explicit UI5 runtime directory for the local preview and app manifest service URI'
+          git push origin HEAD:test/astra2-upload-page
