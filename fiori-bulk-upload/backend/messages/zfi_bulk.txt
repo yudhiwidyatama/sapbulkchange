@@ -1,0 +1,32 @@
+Message class ZFI_BULK (SE91). Maintain in English; translate with SE63.
+
+001 File is not a readable .xlsx workbook
+002 Required column(s) missing: &1&2
+003 File has more than &1 data rows
+004 File extension must be .xlsx
+005 File is larger than &1 MB
+006 No authorization to change documents in company code &1
+007 Document number is missing or invalid
+008 Fiscal year is missing or invalid
+009 Line item must be a number from 1 to 999
+010 Posting date is missing or invalid
+011 &1 is missing or invalid
+012 KODE PROJECT is longer than 18 characters
+013 Source Data must be BEBAN or VENDOR
+014 Duplicate of row &1 (same document, year and line item)
+015 Document &1/&2 not found in company code &3
+016 Line item &1 not found in document &2/&3
+017 Mismatch with system: &1 &2 &3
+018 Cleared item (AUGBL &1); verify field status in OB32
+019 Document is locked by user &1
+020 Assignment already has the requested value
+021 Assignment changed
+022 Change failed for line item &1:
+023 Assignment not as expected after posting (current: &1)
+024 The same file was already posted in batch &1
+025 Batch status &1 does not allow this action
+026 Batch has no rows to post; validate first
+027 Sheet has no header row
+030 Validation finished: &1 rows, &2 planned, &3 errors
+031 Posting finished: &1 changed, &2 errors
+032 Job scheduling failed in &1
