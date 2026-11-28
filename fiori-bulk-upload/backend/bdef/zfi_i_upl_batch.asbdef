@@ -5,7 +5,7 @@ define behavior for ZFI_I_UPL_BATCH alias Batch
 persistent table zfi_upl_batch
 with additional save
 lock master
-authorization master ( instance )
+authorization master ( global, instance )
 etag master LocalLastChangedAt
 {
   create;

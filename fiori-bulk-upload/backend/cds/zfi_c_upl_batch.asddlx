@@ -34,7 +34,7 @@ annotate entity ZFI_C_UPL_BATCH with
 
   @UI: {
     lineItem: [
-      { position: 30, label: 'File', },
+      { position: 30, label: 'File' },
       { type: #FOR_ACTION, dataAction: 'validate', label: 'Validate', position: 10 },
       { type: #FOR_ACTION, dataAction: 'post', label: 'Post', position: 20 }
     ],
