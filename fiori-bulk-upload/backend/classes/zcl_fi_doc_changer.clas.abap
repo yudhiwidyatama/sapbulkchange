@@ -9,6 +9,9 @@ ENDCLASS.
 CLASS zcl_fi_doc_changer IMPLEMENTATION.
 
   METHOD zif_fi_doc_changer~change_document.
+    DATA lt_accchg TYPE STANDARD TABLE OF accchg.
+    DATA lv_msg    TYPE string.
+
     CALL FUNCTION 'ENQUEUE_EFBKPF'
       EXPORTING
         bukrs = iv_bukrs
@@ -25,8 +28,7 @@ CLASS zcl_fi_doc_changer IMPLEMENTATION.
     ENDIF.
 
     LOOP AT it_changes ASSIGNING FIELD-SYMBOL(<c>).
-      DATA(lt_accchg) = VALUE STANDARD TABLE OF accchg WITH EMPTY KEY(
-                          ( fdname = 'ZUONR' oldval = <c>-old_val newval = <c>-new_val ) ).
+      lt_accchg = VALUE #( ( fdname = 'ZUONR' oldval = <c>-old_val newval = <c>-new_val ) ).
 
       CALL FUNCTION 'FI_DOCUMENT_CHANGE'
         EXPORTING
@@ -44,7 +46,7 @@ CLASS zcl_fi_doc_changer IMPLEMENTATION.
           overwrite_creditcard = 5
           OTHERS               = 6.
       IF sy-subrc <> 0.
-        DATA lv_msg TYPE string.
+        CLEAR lv_msg.
         IF sy-msgid IS NOT INITIAL.
           MESSAGE ID sy-msgid TYPE 'S' NUMBER sy-msgno
                   WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 INTO lv_msg.
@@ -58,7 +60,7 @@ CLASS zcl_fi_doc_changer IMPLEMENTATION.
             belnr = iv_belnr
             gjahr = iv_gjahr.
         rs_result = VALUE #( success = abap_false
-                             message = |{ zcl_fi_upl_msg=>text( iv_no = '022' iv_v1 = <c>-buzei ) } { lv_msg }| ).
+                             message = |{ zcl_fi_upl_msg=>text( iv_no = '022' iv_v1 = |{ <c>-buzei }| ) } { lv_msg }| ).
         RETURN.
       ENDIF.
     ENDLOOP.
