@@ -61,8 +61,10 @@ class Handler(BaseHTTPRequestHandler):
         url=urlsplit(self.path); path=url.path; query=parse_qs(url.query)
         if not path.startswith(BASE):
             if self.command!='GET':return self.reply(405)
-            if path.startswith('/resources/'):
-                self.send_response(302);self.send_header('Location','https://ui5.sap.com/1.108/resources/'+path[len('/resources/'):]);self.end_headers();return
+            # Set the bootstrap URL directly, not via a redirect: UI5 derives its resource root from the script element.
+            if path in ('/', '/index.html'):
+                page=(WEB/'index.html').read_text().replace('src="/resources/sap-ui-core.js"','src="https://ui5.sap.com/1.108.57/resources/sap-ui-core.js"')
+                return self.reply(200,page.encode(),'text/html; charset=utf-8')
             file=(WEB/(path.strip('/') or 'index.html')).resolve()
             if WEB not in file.parents or not file.is_file():return self.reply(404)
             import mimetypes

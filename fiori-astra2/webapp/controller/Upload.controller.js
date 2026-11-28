@@ -13,7 +13,7 @@ sap.ui.define([
     onInit: function () {
       PageController.prototype.onInit.apply(this, arguments);
       this.vm = new JSONModel(initial()); this.getView().setModel(this.vm,'run');
-      const service=this.getView().getModel().getServiceUrl();
+      const service=this.getAppComponent().getManifestEntry('/sap.app/dataSources/mainService/uri');
       this.client = new api.RunClient(service); this.epoch=0; this.offset=0;
       try {const id=sessionStorage.getItem('astra.fi.assign.run'); if(id){this.vm.setProperty('/id',id);this.refreshRun();}} catch (_) { /* storage optional */ }
     },
@@ -38,7 +38,7 @@ sap.ui.define([
     },
     chooseCompany: function(){return this.work(async current=>{
       const companies=await this.client.companies();if(!current())return;
-      const dialog=new SelectDialog({title:this.text('company'),confirm:e=>{const item=e.getParameter('selectedItem');if(item)this.clearPlan(item.getTitle());},afterClose:()=>dialog.destroy()});
+      const dialog=new SelectDialog({title:this.text('company'),confirm:e=>{const item=e.getParameter('selectedItem');if(item)this.clearPlan(item.getTitle());setTimeout(()=>dialog.destroy(),0);},cancel:()=>setTimeout(()=>dialog.destroy(),0)});
       companies.forEach(c=>dialog.addItem(new StandardListItem({title:c.CompanyCode,description:c.Name})));this.getView().addDependent(dialog);dialog.open();
     });},
     downloadTemplate: function(){download(template.workbook(),'FI-assignment-template.xlsx');},
