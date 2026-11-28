@@ -155,8 +155,10 @@ CLASS zcl_fi_upload_job IMPLEMENTATION.
     DATA(ls_counts) = zcl_fi_upload_engine=>count( lt_items ).
     update_batch( iv_status = zif_fi_upl_types=>gc_batch_status-validated is_counts = ls_counts ).
     mo_log->add( iv_msgty = 'S'
-                 iv_text  = zcl_fi_upl_msg=>text( iv_no = '030' iv_v1 = ls_counts-rows
-                                                  iv_v2 = ls_counts-planned iv_v3 = ls_counts-error ) ).
+                 iv_text  = zcl_fi_upl_msg=>text( iv_no = '030'
+                                                  iv_v1 = |{ ls_counts-rows }|
+                                                  iv_v2 = |{ ls_counts-planned }|
+                                                  iv_v3 = |{ ls_counts-error }| ) ).
     mo_log->save( ).
     COMMIT WORK.
   ENDMETHOD.
@@ -212,7 +214,9 @@ CLASS zcl_fi_upload_job IMPLEMENTATION.
     DATA(ls_counts) = zcl_fi_upload_engine=>count( lt_items ).
     update_batch( iv_status = zif_fi_upl_types=>gc_batch_status-done is_counts = ls_counts ).
     mo_log->add( iv_msgty = 'S'
-                 iv_text  = zcl_fi_upl_msg=>text( iv_no = '031' iv_v1 = ls_counts-changed iv_v2 = ls_counts-error ) ).
+                 iv_text  = zcl_fi_upl_msg=>text( iv_no = '031'
+                                                  iv_v1 = |{ ls_counts-changed }|
+                                                  iv_v2 = |{ ls_counts-error }| ) ).
     mo_log->save( ).
     COMMIT WORK.
   ENDMETHOD.

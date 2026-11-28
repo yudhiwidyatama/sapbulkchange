@@ -218,24 +218,23 @@ CLASS lhc_batch IMPLEMENTATION.
     LOOP AT lt_batches ASSIGNING FIELD-SYMBOL(<b>).
       DATA(lv_msgno) = VALUE symsgno( ).
       DATA(lv_v1)    = VALUE string( ).
-      DATA(ls_elem)  = VALUE zfi_i_upl_batch\\Batch-%element( ).
 
       IF <b>-CompanyCode IS INITIAL.
-        lv_msgno = '011'. lv_v1 = 'Company Code'. ls_elem-CompanyCode = if_abap_behv=>mk-on.
+        lv_msgno = '011'. lv_v1 = 'Company Code'.
       ELSEIF <b>-Ledger IS INITIAL.
-        lv_msgno = '011'. lv_v1 = 'Ledger'. ls_elem-Ledger = if_abap_behv=>mk-on.
+        lv_msgno = '011'. lv_v1 = 'Ledger'.
       ELSEIF <b>-Attachment IS INITIAL.
-        lv_msgno = '011'. lv_v1 = 'File'. ls_elem-Attachment = if_abap_behv=>mk-on.
+        lv_msgno = '011'. lv_v1 = 'File'.
       ELSEIF xstrlen( <b>-Attachment ) < 4 OR <b>-Attachment(2) <> CONV xstring( '504B' ).
         " an .xlsx file is a zip archive and starts with 'PK'
-        lv_msgno = '001'. ls_elem-Attachment = if_abap_behv=>mk-on.
+        lv_msgno = '001'.
       ELSEIF <b>-FileName IS NOT INITIAL
          AND NOT matches( val = to_lower( condense( <b>-FileName ) ) regex = '.*\.xlsx' ).
-        lv_msgno = '004'. ls_elem-Attachment = if_abap_behv=>mk-on.
+        lv_msgno = '004'.
       ELSEIF <b>-FileSize > zif_fi_upl_types=>gc_max_bytes.
-        lv_msgno = '005'. lv_v1 = |{ zif_fi_upl_types=>gc_max_mb }|. ls_elem-Attachment = if_abap_behv=>mk-on.
+        lv_msgno = '005'. lv_v1 = |{ zif_fi_upl_types=>gc_max_mb }|.
       ELSEIF authorized( <b>-CompanyCode ) = abap_false.
-        lv_msgno = '006'. lv_v1 = <b>-CompanyCode. ls_elem-CompanyCode = if_abap_behv=>mk-on.
+        lv_msgno = '006'. lv_v1 = <b>-CompanyCode.
       ENDIF.
 
       IF lv_msgno IS NOT INITIAL.
@@ -243,8 +242,7 @@ CLASS lhc_batch IMPLEMENTATION.
         APPEND VALUE #( %tky = <b>-%tky
                         %msg = new_message( id = zif_fi_upl_types=>gc_msgid number = lv_msgno
                                             severity = if_abap_behv_message=>severity-error
-                                            v1 = lv_v1 )
-                        %element = ls_elem ) TO reported-batch.
+                                            v1 = lv_v1 ) ) TO reported-batch.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
