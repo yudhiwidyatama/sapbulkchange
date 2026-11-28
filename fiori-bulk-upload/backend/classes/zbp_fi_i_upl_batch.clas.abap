@@ -1,0 +1,6 @@
+CLASS zbp_fi_i_upl_batch DEFINITION PUBLIC ABSTRACT FINAL FOR BEHAVIOR OF zfi_i_upl_batch.
+ENDCLASS.
+
+
+CLASS zbp_fi_i_upl_batch IMPLEMENTATION.
+ENDCLASS.
